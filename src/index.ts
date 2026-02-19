@@ -10,14 +10,5 @@ export type { StorageDirValue } from "./storage.js";
 export { download } from "./download.js";
 
 // Output metadata for usage-based pricing
-export { textMeta, imageMeta, videoMeta, audioMeta, rawMeta } from "./output-meta.js";
-export type {
-  OutputMeta,
-  MetaItem,
-  MetaItemBase,
-  TextMeta,
-  ImageMeta,
-  VideoMeta,
-  AudioMeta,
-  RawMeta,
-} from "./output-meta.js";
+// (includes generated types + factory functions)
+export * from "./output-meta.js";
