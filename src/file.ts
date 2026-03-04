@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
-import { createWriteStream, existsSync, mkdirSync, statSync, renameSync, unlinkSync, copyFileSync } from "node:fs";
-import { basename, resolve, join } from "node:path";
+import { createWriteStream, existsSync, mkdirSync, statSync, renameSync, unlinkSync, copyFileSync, writeFileSync } from "node:fs";
+import { basename, resolve, join, extname } from "node:path";
 import { homedir } from "node:os";
 import { get as httpsGet } from "node:https";
 import { get as httpGet, type IncomingMessage } from "node:http";
@@ -104,7 +104,9 @@ export class File {
 
     // Resolve URI
     if (file.uri) {
-      if (isUrl(file.uri)) {
+      if (isDataUri(file.uri)) {
+        file._decodeDataUri(file.uri);
+      } else if (isUrl(file.uri)) {
         await file._downloadUrl(file.uri);
       } else {
         // Treat as local path
@@ -182,6 +184,39 @@ export class File {
     return join(hashDir, fname);
   }
 
+  // --- Data URI ---
+
+  private _decodeDataUri(uri: string): void {
+    const parsed = parseDataUri(uri);
+
+    // Create cache path based on hash
+    const hash = createHash("sha256").update(uri).digest("hex").slice(0, 16);
+    const cacheDir = join(File.getCacheDir(), "data_uri", hash);
+
+    // Check for existing cached file
+    if (existsSync(cacheDir)) {
+      const files = require("node:fs").readdirSync(cacheDir) as string[];
+      if (files.length > 0) {
+        this.path = join(cacheDir, files[0]);
+        return;
+      }
+    }
+
+    // Set content type from data URI
+    if (!this.contentType) {
+      this.contentType = parsed.mediaType;
+    }
+
+    // Write to cache
+    mkdirSync(cacheDir, { recursive: true });
+    const ext = getExtensionForMimeType(parsed.mediaType);
+    const filename = `file${ext}`;
+    const cachePath = join(cacheDir, filename);
+
+    writeFileSync(cachePath, parsed.data);
+    this.path = cachePath;
+  }
+
   // --- Download ---
 
   private async _downloadUrl(url: string): Promise<void> {
@@ -227,6 +262,70 @@ export class File {
 
 function isUrl(s: string): boolean {
   return s.startsWith("http://") || s.startsWith("https://");
+}
+
+function isDataUri(s: string): boolean {
+  return s.startsWith("data:");
+}
+
+interface ParsedDataUri {
+  mediaType: string;
+  data: Buffer;
+}
+
+/**
+ * Parse a data URI and return the media type and decoded data.
+ *
+ * Supports formats:
+ * - data:image/jpeg;base64,/9j/4AAQ...
+ * - data:text/plain,Hello%20World
+ * - data:;base64,SGVsbG8= (defaults to text/plain)
+ */
+function parseDataUri(uri: string): ParsedDataUri {
+  const match = uri.match(/^data:([^;,]*)?(?:;(base64))?,(.*)$/s);
+  if (!match) {
+    throw new Error("Invalid data URI format");
+  }
+
+  const mediaType = match[1] || "text/plain";
+  const isBase64 = match[2] === "base64";
+  let dataStr = match[3];
+
+  if (isBase64) {
+    // Handle URL-safe base64 (- and _ instead of + and /)
+    dataStr = dataStr.replace(/-/g, "+").replace(/_/g, "/");
+    // Add padding if needed
+    const padding = 4 - (dataStr.length % 4);
+    if (padding !== 4) {
+      dataStr += "=".repeat(padding);
+    }
+    return { mediaType, data: Buffer.from(dataStr, "base64") };
+  } else {
+    // URL-encoded data
+    return { mediaType, data: Buffer.from(decodeURIComponent(dataStr), "utf-8") };
+  }
+}
+
+const EXTENSION_MAP: Record<string, string> = {
+  "image/jpeg": ".jpg",
+  "image/png": ".png",
+  "image/gif": ".gif",
+  "image/webp": ".webp",
+  "image/svg+xml": ".svg",
+  "video/mp4": ".mp4",
+  "video/webm": ".webm",
+  "audio/mpeg": ".mp3",
+  "audio/wav": ".wav",
+  "audio/ogg": ".ogg",
+  "application/pdf": ".pdf",
+  "application/json": ".json",
+  "text/plain": ".txt",
+  "text/html": ".html",
+  "text/csv": ".csv",
+};
+
+function getExtensionForMimeType(mimeType: string): string {
+  return EXTENSION_MAP[mimeType] || "";
 }
 
 function downloadToFile(url: string, destPath: string): Promise<void> {
