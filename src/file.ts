@@ -33,30 +33,130 @@ export interface FileData {
  * A file in the inference.sh ecosystem.
  *
  * Accepts a URL, local path, or options object.
- * URLs are downloaded and cached locally on construction (via `await File.from()`).
+ * URLs are downloaded lazily when `getPath()` is called.
  * Local paths are resolved to absolute paths.
+ *
+ * For API wrapper apps that only need to forward the URL, use `uri` directly
+ * without calling `getPath()` to avoid unnecessary downloads.
  *
  * In JSON output, File serializes to `{ path, uri, content_type, size, filename }`
  * — the engine uploads local `path` files to CDN and replaces with `uri`.
  */
 export class File {
   uri?: string;
-  path?: string;
   contentType?: string;
   size?: number;
   filename?: string;
 
+  private _path?: string;
+  private _resolved = false;
+  private _downloading?: Promise<string>;
+
   private constructor(options: FileOptions) {
     this.uri = options.uri;
-    this.path = options.path;
+    this._path = options.path;
     this.contentType = options.contentType;
     this.size = options.size;
     this.filename = options.filename;
   }
 
   /**
+   * Get the local file path. Downloads the file lazily if needed.
+   * For sync access after download, use the `path` getter.
+   */
+  async getPath(): Promise<string> {
+    if (this._resolved && this._path) {
+      return this._path;
+    }
+
+    // Avoid concurrent downloads
+    if (this._downloading) {
+      return this._downloading;
+    }
+
+    this._downloading = this._resolve();
+    try {
+      const path = await this._downloading;
+      return path;
+    } finally {
+      this._downloading = undefined;
+    }
+  }
+
+  /**
+   * Sync access to path. Returns undefined if not yet downloaded.
+   * Use `getPath()` for lazy downloading.
+   */
+  get path(): string | undefined {
+    return this._path;
+  }
+
+  /**
+   * Check if the file has been downloaded/resolved.
+   */
+  get isResolved(): boolean {
+    return this._resolved;
+  }
+
+  private async _resolve(): Promise<string> {
+    if (this._resolved && this._path) {
+      return this._path;
+    }
+
+    if (this.uri) {
+      if (isDataUri(this.uri)) {
+        this._decodeDataUri(this.uri);
+      } else if (isUrl(this.uri)) {
+        await this._downloadUrl(this.uri);
+      } else {
+        // Treat as local path
+        this._path = resolve(this.uri);
+      }
+    }
+
+    if (this._path) {
+      this._path = resolve(this._path);
+      this._populateMetadata();
+    }
+
+    this._resolved = true;
+
+    if (!this._path) {
+      throw new Error("Failed to resolve file path");
+    }
+
+    return this._path;
+  }
+
+  /**
+   * Create a lazy File from a URL or path string.
+   * Does NOT download immediately — download happens when `getPath()` is called.
+   *
+   * @example
+   * ```js
+   * const file = File.lazy("https://example.com/image.jpg");
+   * console.log(file.uri);  // Available immediately
+   * const path = await file.getPath();  // Downloads here
+   * ```
+   */
+  static lazy(input: string): File {
+    const file = new File({ uri: input });
+
+    // If it's a local path (not URL or data URI), resolve immediately
+    if (!isUrl(input) && !isDataUri(input)) {
+      file._path = resolve(input);
+      file._resolved = true;
+      file._populateMetadata();
+    }
+
+    return file;
+  }
+
+  /**
    * Create a File from a URL, local path, or options object.
-   * URLs are downloaded and cached automatically.
+   * URLs are downloaded and cached automatically (eager loading).
+   *
+   * For lazy loading, use `File.lazy()` instead.
    *
    * @example
    * ```js
@@ -74,7 +174,7 @@ export class File {
     if (input instanceof File) {
       return new File({
         uri: input.uri,
-        path: input.path,
+        path: input._path,
         contentType: input.contentType,
         size: input.size,
         filename: input.filename,
@@ -102,24 +202,8 @@ export class File {
 
     const file = new File(options);
 
-    // Resolve URI
-    if (file.uri) {
-      if (isDataUri(file.uri)) {
-        file._decodeDataUri(file.uri);
-      } else if (isUrl(file.uri)) {
-        await file._downloadUrl(file.uri);
-      } else {
-        // Treat as local path
-        file.path = resolve(file.uri);
-      }
-    }
-
-    if (file.path) {
-      file.path = resolve(file.path);
-      file._populateMetadata();
-    } else {
-      throw new Error("Either 'uri' or 'path' must be provided and be valid");
-    }
+    // Eagerly resolve
+    await file.getPath();
 
     return file;
   }
@@ -130,15 +214,25 @@ export class File {
   static fromPath(localPath: string): File {
     const absPath = resolve(localPath);
     const file = new File({ path: absPath });
+    file._resolved = true;
     file._populateMetadata();
     return file;
   }
 
   /**
    * Check if the file exists on disk.
+   * Note: This checks the current state without triggering download.
+   * Use `getPath()` first if you need to ensure the file is downloaded.
    */
   exists(): boolean {
-    return this.path != null && existsSync(this.path);
+    return this._path != null && existsSync(this._path);
+  }
+
+  /**
+   * Check if we have a local path (without triggering download).
+   */
+  isLocal(): boolean {
+    return this._path != null;
   }
 
   /**
@@ -151,11 +245,12 @@ export class File {
   /**
    * Serialize to a plain object for JSON output.
    * The engine reads `path` fields and uploads them to CDN.
+   * Note: Uses internal _path to avoid triggering download during serialization.
    */
   toJSON(): FileData {
     const result: FileData = {};
     if (this.uri != null) result.uri = this.uri;
-    if (this.path != null) result.path = this.path;
+    if (this._path != null) result.path = this._path;
     if (this.contentType != null) result.content_type = this.contentType;
     if (this.size != null) result.size = this.size;
     if (this.filename != null) result.filename = this.filename;
@@ -197,7 +292,8 @@ export class File {
     if (existsSync(cacheDir)) {
       const files = require("node:fs").readdirSync(cacheDir) as string[];
       if (files.length > 0) {
-        this.path = join(cacheDir, files[0]);
+        this._path = join(cacheDir, files[0]);
+        this._populateMetadata();
         return;
       }
     }
@@ -214,7 +310,8 @@ export class File {
     const cachePath = join(cacheDir, filename);
 
     writeFileSync(cachePath, parsed.data);
-    this.path = cachePath;
+    this._path = cachePath;
+    this._populateMetadata();
   }
 
   // --- Download ---
@@ -223,7 +320,8 @@ export class File {
     const cachePath = this._getCachePath(url);
 
     if (existsSync(cachePath)) {
-      this.path = cachePath;
+      this._path = cachePath;
+      this._populateMetadata();
       return;
     }
 
@@ -232,7 +330,8 @@ export class File {
     try {
       await downloadToFile(url, tmpPath);
       renameSync(tmpPath, cachePath);
-      this.path = cachePath;
+      this._path = cachePath;
+      this._populateMetadata();
     } catch (err) {
       try { unlinkSync(tmpPath); } catch { /* ignore */ }
       throw new Error(`Failed to download ${url}: ${(err as Error).message}`);
@@ -242,18 +341,18 @@ export class File {
   // --- Metadata ---
 
   private _populateMetadata(): void {
-    if (!this.path || !existsSync(this.path)) return;
+    if (!this._path || !existsSync(this._path)) return;
 
     if (!this.contentType) {
-      this.contentType = guessContentType(this.path);
+      this.contentType = guessContentType(this._path);
     }
     if (this.size == null) {
       try {
-        this.size = statSync(this.path).size;
+        this.size = statSync(this._path).size;
       } catch { /* ignore */ }
     }
     if (!this.filename) {
-      this.filename = basename(this.path);
+      this.filename = basename(this._path);
     }
   }
 }

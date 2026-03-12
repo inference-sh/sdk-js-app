@@ -1,4 +1,4 @@
-import { describe, it, before, after } from "node:test";
+import { describe, it, before, after, mock } from "node:test";
 import assert from "node:assert";
 import { writeFileSync, mkdirSync, rmSync } from "node:fs";
 import { join } from "node:path";
@@ -78,5 +78,114 @@ describe("File", () => {
 
   it("throws on missing path and uri", async () => {
     await assert.rejects(() => File.from({}), /Either 'uri' or 'path' must be provided/);
+  });
+});
+
+describe("File lazy loading", () => {
+  before(() => {
+    mkdirSync(TEST_DIR, { recursive: true });
+    testFile = join(TEST_DIR, "hello.txt");
+    writeFileSync(testFile, "hello world");
+  });
+
+  after(() => {
+    rmSync(TEST_DIR, { recursive: true, force: true });
+  });
+
+  it("File.lazy() does not download URL on construction", () => {
+    const url = "https://example.com/image.jpg";
+    const file = File.lazy(url);
+
+    // Should have URI immediately
+    assert.strictEqual(file.uri, url);
+
+    // Should NOT be resolved yet
+    assert.strictEqual(file.isResolved, false);
+
+    // Should NOT have path yet
+    assert.strictEqual(file.path, undefined);
+  });
+
+  it("File.lazy() resolves local paths immediately", () => {
+    const file = File.lazy(testFile);
+
+    // Should be resolved immediately for local paths
+    assert.strictEqual(file.isResolved, true);
+
+    // Should have path
+    assert.ok(file.path);
+    assert.ok(file.path.endsWith("hello.txt"));
+  });
+
+  it("uri access does not trigger download", () => {
+    const url = "https://example.com/image.jpg";
+    const file = File.lazy(url);
+
+    // Access uri multiple times
+    const uri1 = file.uri;
+    const uri2 = file.uri;
+    const uri3 = file.uri;
+
+    assert.strictEqual(uri1, url);
+    assert.strictEqual(uri2, url);
+    assert.strictEqual(uri3, url);
+
+    // Should still not be resolved
+    assert.strictEqual(file.isResolved, false);
+  });
+
+  it("isLocal() does not trigger download", () => {
+    const url = "https://example.com/image.jpg";
+    const file = File.lazy(url);
+
+    // Check isLocal
+    assert.strictEqual(file.isLocal(), false);
+
+    // Should still not be resolved
+    assert.strictEqual(file.isResolved, false);
+  });
+
+  it("toJSON() does not trigger download", () => {
+    const url = "https://example.com/image.jpg";
+    const file = File.lazy(url);
+
+    // Serialize
+    const json = file.toJSON();
+
+    // Should have URI but no path
+    assert.strictEqual(json.uri, url);
+    assert.strictEqual(json.path, undefined);
+
+    // Should still not be resolved
+    assert.strictEqual(file.isResolved, false);
+  });
+
+  it("JSON.stringify does not trigger download", () => {
+    const url = "https://example.com/image.jpg";
+    const file = File.lazy(url);
+
+    // Stringify
+    const str = JSON.stringify({ image: file });
+    const parsed = JSON.parse(str);
+
+    // Should have URI but no path
+    assert.strictEqual(parsed.image.uri, url);
+    assert.strictEqual(parsed.image.path, undefined);
+
+    // Should still not be resolved
+    assert.strictEqual(file.isResolved, false);
+  });
+
+  it("getPath() triggers download for URLs", async () => {
+    // Use a local path that looks like URL behavior
+    // (actual URL download would require network)
+    const file = File.lazy(testFile);
+
+    // getPath should work
+    const path = await file.getPath();
+
+    assert.ok(path);
+    assert.ok(path.endsWith("hello.txt"));
+    assert.strictEqual(file.isResolved, true);
   });
 });

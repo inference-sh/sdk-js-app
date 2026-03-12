@@ -2,6 +2,9 @@
 export { File } from "./file.js";
 export type { FileOptions, FileData } from "./file.js";
 
+// Zod schema utilities
+export { createFileSchema, isFileSchema, FILE_SCHEMA_MARKER } from "./schema.js";
+
 // Storage directories
 export { StorageDir, ensureDir } from "./storage.js";
 export type { StorageDirValue } from "./storage.js";
