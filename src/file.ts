@@ -132,6 +132,10 @@ export class File {
    * Create a lazy File from a URL or path string.
    * Does NOT download immediately — download happens when `getPath()` is called.
    *
+   * Note: This is safe in JS because `getPath()` is async. The Python SDK had to
+   * revert to eager download because `.path` is a sync property that blocks the
+   * event loop when called from async code (e.g. Playwright + httpx apps).
+   *
    * @example
    * ```js
    * const file = File.lazy("https://example.com/image.jpg");
