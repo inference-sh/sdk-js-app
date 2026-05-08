@@ -30,23 +30,26 @@ test: build
 	npm test
 
 # =============================================================================
-# Publishing
+# Version & Release
 # =============================================================================
 
-.PHONY: bump-major bump-minor bump-patch release
+.PHONY: patch minor major release
 
-bump-major:
-	./scripts/bump.sh major
+patch:
+	@./scripts/bump.sh patch
 
-bump-minor:
-	./scripts/bump.sh minor
+minor:
+	@./scripts/bump.sh minor
 
-bump-patch:
-	./scripts/bump.sh patch
+major:
+	@./scripts/bump.sh major
 
-# Create GitHub release (requires gh CLI and being on main branch)
+# Push and create GitHub release (triggers npm publish via CI)
 release:
-	./scripts/release.sh
+	@VERSION=$$(git describe --tags --abbrev=0) && \
+	git push origin HEAD "$$VERSION" && \
+	gh release create "$$VERSION" --title "$$VERSION" --generate-notes && \
+	echo "Released $$VERSION"
 
 # =============================================================================
 # Helpers
@@ -66,10 +69,10 @@ help:
 	@echo "Tests:"
 	@echo "  test           Build and run tests"
 	@echo ""
-	@echo "Publishing:"
-	@echo "  bump-patch     Bump patch version, tag, push"
-	@echo "  bump-minor     Bump minor version, tag, push"
-	@echo "  bump-major     Bump major version, tag, push"
+	@echo "Release:"
+	@echo "  patch          Bump patch version"
+	@echo "  minor          Bump minor version"
+	@echo "  major          Bump major version"
 	@echo "  release        Create GitHub release (triggers npm publish)"
 
 .DEFAULT_GOAL := help
