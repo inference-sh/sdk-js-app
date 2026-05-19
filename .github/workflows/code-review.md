@@ -2,7 +2,7 @@
 description: "AI code review on push to main"
 on:
   push:
-    branches: [main]
+    branches: [dev]
 
 permissions:
   contents: read
