@@ -229,7 +229,7 @@ export class App {
 - [documentation](https://inference.sh/docs) — getting started guides
 - [app development guide](https://inference.sh/docs/extend/app-code) — writing app logic
 - [client sdk](https://www.npmjs.com/package/@inferencesh/sdk) — calling apps from your code
-- [discord](https://discord.gg/RM77SWSbyT) — community support
+- [discord](https://discord.gg/inference) — community support
 
 ## license
 
