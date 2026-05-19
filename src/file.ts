@@ -430,7 +430,10 @@ function getExtensionForMimeType(mimeType: string): string {
   return EXTENSION_MAP[mimeType] || "";
 }
 
-function downloadToFile(url: string, destPath: string): Promise<void> {
+function downloadToFile(url: string, destPath: string, maxRedirects = 10): Promise<void> {
+  if (maxRedirects < 0) {
+    return Promise.reject(new Error(`Too many redirects downloading ${url}`));
+  }
   return new Promise((resolve, reject) => {
     const parsed = new URL(url);
     const getter = parsed.protocol === "https:" ? httpsGet : httpGet;
@@ -438,7 +441,7 @@ function downloadToFile(url: string, destPath: string): Promise<void> {
     const request = getter(url, (response: IncomingMessage) => {
       // Follow redirects
       if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-        downloadToFile(response.headers.location, destPath).then(resolve, reject);
+        downloadToFile(response.headers.location, destPath, maxRedirects - 1).then(resolve, reject);
         return;
       }
 
