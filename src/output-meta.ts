@@ -40,21 +40,21 @@ export function textMeta(opts: Omit<TextMeta, "type">): TextMeta {
 }
 
 /** Create an image metadata item. */
-export function imageMeta(opts: Omit<ImageMeta, "type"> = {} as any): ImageMeta {
+export function imageMeta(opts: Omit<ImageMeta, "type"> = {}): ImageMeta {
   return { type: "image", ...opts };
 }
 
 /** Create a video metadata item. */
-export function videoMeta(opts: Omit<VideoMeta, "type"> = {} as any): VideoMeta {
+export function videoMeta(opts: Omit<VideoMeta, "type"> = {}): VideoMeta {
   return { type: "video", ...opts };
 }
 
 /** Create an audio metadata item. */
-export function audioMeta(opts: Omit<AudioMeta, "type"> = {} as any): AudioMeta {
+export function audioMeta(opts: Omit<AudioMeta, "type"> = {}): AudioMeta {
   return { type: "audio", ...opts };
 }
 
 /** Create a raw metadata item (custom pricing). */
-export function rawMeta(opts: Omit<RawMeta, "type"> = {} as any): RawMeta {
+export function rawMeta(opts: Omit<RawMeta, "type"> = {}): RawMeta {
   return { type: "raw", ...opts };
 }
