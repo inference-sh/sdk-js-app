@@ -76,3 +76,6 @@ help:
 	@echo "  release        Create GitHub release (triggers npm publish)"
 
 .DEFAULT_GOAL := help
+
+main:
+	git push origin dev:main
