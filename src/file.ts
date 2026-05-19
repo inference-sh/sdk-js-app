@@ -1,10 +1,9 @@
 import { createHash } from "node:crypto";
-import { createWriteStream, existsSync, mkdirSync, statSync, renameSync, unlinkSync, copyFileSync, writeFileSync } from "node:fs";
-import { basename, resolve, join, extname } from "node:path";
+import { createWriteStream, existsSync, mkdirSync, readdirSync, statSync, renameSync, unlinkSync, copyFileSync, writeFileSync } from "node:fs";
+import { basename, resolve, join } from "node:path";
 import { homedir } from "node:os";
 import { get as httpsGet } from "node:https";
 import { get as httpGet, type IncomingMessage } from "node:http";
-import { lookup } from "node:dns/promises";
 import { URL } from "node:url";
 
 /**
@@ -294,7 +293,7 @@ export class File {
 
     // Check for existing cached file
     if (existsSync(cacheDir)) {
-      const files = require("node:fs").readdirSync(cacheDir) as string[];
+      const files = readdirSync(cacheDir) as string[];
       if (files.length > 0) {
         this._path = join(cacheDir, files[0]);
         this._populateMetadata();
