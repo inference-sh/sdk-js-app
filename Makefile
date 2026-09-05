@@ -9,16 +9,22 @@
 # Setup & Build
 # =============================================================================
 
-.PHONY: install build clean
+.PHONY: install build clean relock
 
 install:
-	npm install
+	pnpm install
 
 build:
-	npm run build
+	pnpm run build
 
 clean:
-	npm run clean
+	pnpm run clean
+
+# This package's pnpm-lock.yaml is for standalone clones (CI, publish). Inside the
+# monorepo a plain `pnpm install` updates the workspace's shared lock instead, so
+# run this after any dependency change or the next release fails on lockfile drift.
+relock:
+	pnpm install --lockfile-only --ignore-workspace --ignore-scripts
 
 # =============================================================================
 # Tests
@@ -27,7 +33,7 @@ clean:
 .PHONY: test
 
 test: build
-	npm test
+	pnpm test
 
 # =============================================================================
 # Version & Release
