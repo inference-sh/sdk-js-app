@@ -150,7 +150,7 @@ describe("zodToJsonSchema file support", () => {
     try {
       // Path relative to test file location - use dynamic import
       // @ts-ignore - importing JS file without declarations
-      const utils = await import("../../../../go/visor/kernels/node/tools/zod-utils.js");
+      const utils = await import("../../../../go/engine/internal/visor/kernels/node/tools/zod-utils.js");
       zodToJsonSchema = utils.zodToJsonSchema;
     } catch (e) {
       console.log("Could not import zod-utils, skipping zodToJsonSchema tests:", e);

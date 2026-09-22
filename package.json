@@ -44,7 +44,8 @@
     "@types/node": "^22.0.0",
     "rimraf": "^6.0.1",
     "typescript": "~6.0.3",
-    "zod": "^4.3.6"
+    "zod": "^4.3.6",
+    "zod3": "npm:zod@^3.25.76"
   },
   "files": [
     "dist",

@@ -22,6 +22,7 @@ npm install @inferencesh/app
 | `StorageDir` | standard storage directory constants (`DATA`, `TEMP`, `CACHE`) |
 | `download()` | download a url to a directory with caching |
 | `textMeta`, `imageMeta`, `videoMeta`, `audioMeta`, `rawMeta` | output metadata factories for usage-based pricing |
+| `createStreamSchema`, `pcm16`, `media`, `Live` | live fields for stream functions — values that flow over the socket while the task runs |
 
 ## file handling
 
@@ -218,6 +219,42 @@ export class App {
   }
 }
 ```
+
+## stream functions
+
+a stream function takes its input and a socket (`async talk(inputData, socket)`), runs until it returns, and its return value is the result. some input and output fields are **live**: their values travel over the socket while the task runs instead of in the request body. declare them with `createStreamSchema`; in the json schema they become `{"type": "array", "format": "stream", "items": ...}` and are never required.
+
+```javascript
+import { z } from "zod";
+import { createStreamSchema, pcm16, Live } from "@inferencesh/app";
+
+export const TalkInput = z.object({
+  effect: z.enum(["none", "robot"]).default("none"),   // ordinary: set at the start, may change live
+  audio: createStreamSchema(z, pcm16(z, 16000)),      // live media: binary frames
+});
+
+export const TalkOutput = z.object({
+  audio: createStreamSchema(z, pcm16(z, 16000)),
+  frames: z.number().default(0),
+});
+
+export class App {
+  async talk(input, socket) {
+    const live = new Live(socket, input, TalkInput, TalkOutput);
+    let n = 0;
+    for await (const { field, value } of live) {
+      if (field === "audio") {          // value is a Buffer of PCM samples
+        n++;
+        await live.send({ audio: value });
+      }
+      // an ordinary field (effect) is already set on input when it changes
+    }
+    return { frames: n };
+  }
+}
+```
+
+on the wire, a binary frame is one item of the schema's single binary live field (`pcm16(z, rate, channels)` or `media(z, contentType)`); a json text frame is a partial object keyed by field name: an item of a live field (`{"events": {"type": "interrupt"}}`) or a new value for an ordinary field (`{"effect": "robot"}`). frames that do not fit the input schema are answered with `{"error": {"field", "message"}}` and skipped. `live.send({...})` sends the output binary field as a binary frame and everything else as one json frame; unknown output fields throw.
 
 ## requirements
 

@@ -5,6 +5,20 @@ export type { FileOptions, FileData } from "./file.js";
 // Zod schema utilities
 export { createFileSchema, isFileSchema, FILE_SCHEMA_MARKER } from "./schema.js";
 
+// Stream functions: the socket and live fields
+export type { Socket, Frame } from "./socket.js";
+export {
+  createStreamSchema,
+  media,
+  pcm16,
+  Live,
+  liveFields,
+  binaryField,
+  STREAM_SCHEMA_MARKER,
+  BINARY_SCHEMA_MARKER,
+} from "./stream.js";
+export type { Update } from "./stream.js";
+
 // Storage directories
 export { StorageDir, ensureDir } from "./storage.js";
 export type { StorageDirValue } from "./storage.js";
