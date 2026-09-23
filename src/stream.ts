@@ -229,6 +229,7 @@ export class Live {
   private readonly inBinary: string | null;
   private readonly outShape: Record<string, any>;
   private readonly outBinary: string | null;
+  private refusedBinary = false;
 
   constructor(socket: Socket, inputData: Record<string, unknown>, inputSchema: any, outputSchema: any) {
     this.socket = socket;
@@ -262,7 +263,12 @@ export class Live {
   private async read(frame: unknown): Promise<Update[]> {
     if (isBinaryFrame(frame)) {
       if (this.inBinary === null) {
-        await this.refuse(null, "this function takes no binary frames");
+        // Once: a caller streaming audio to the wrong function would
+        // otherwise get an error frame for every frame it sends.
+        if (!this.refusedBinary) {
+          this.refusedBinary = true;
+          await this.refuse(null, "this function takes no binary frames");
+        }
         return [];
       }
       return [{ field: this.inBinary, value: toBuffer(frame) }];
@@ -281,28 +287,24 @@ export class Live {
 
     const updates: Update[] = [];
     for (const [key, raw] of Object.entries(patch as Record<string, unknown>)) {
-      if (Object.prototype.hasOwnProperty.call(this.inLive, key)) {
-        if (key === this.inBinary) {
-          await this.refuse(key, "send this field's items as binary frames");
-          continue;
-        }
-        const result = this.inLive[key].safeParse(raw);
-        if (!result.success) {
-          await this.refuse(key, firstIssue(result));
-          continue;
-        }
-        updates.push({ field: key, value: result.data });
-      } else if (Object.prototype.hasOwnProperty.call(this.inShape, key)) {
-        const result = this.inShape[key].safeParse(raw);
-        if (!result.success) {
-          await this.refuse(key, firstIssue(result));
-          continue;
-        }
-        this.input[key] = result.data;
-        updates.push({ field: key, value: result.data });
-      } else {
+      const live = Object.prototype.hasOwnProperty.call(this.inLive, key);
+      if (!live && !Object.prototype.hasOwnProperty.call(this.inShape, key)) {
         await this.refuse(key, "no such field");
+        continue;
       }
+      if (key === this.inBinary) {
+        await this.refuse(key, "send this field's items as binary frames");
+        continue;
+      }
+      // A live field's items are validated against the item schema, an
+      // ordinary field against its own and then applied to the input.
+      const result = (live ? this.inLive[key] : this.inShape[key]).safeParse(raw);
+      if (!result.success) {
+        await this.refuse(key, firstIssue(result));
+        continue;
+      }
+      if (!live) this.input[key] = result.data;
+      updates.push({ field: key, value: result.data });
     }
     return updates;
   }

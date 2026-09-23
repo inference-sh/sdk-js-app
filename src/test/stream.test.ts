@@ -186,11 +186,12 @@ for (const [label, z] of [
 
     it("refuses binary frames when the input has no binary field", async () => {
       const TextOnly = z.object({ events: createStreamSchema(z, UserText) });
-      const socket = new FakeSocket([Buffer.from([0])]);
+      const socket = new FakeSocket([Buffer.from([0]), Buffer.from([1]), Buffer.from([2])]);
 
       const updates = await collect(new Live(socket, {}, TextOnly, TalkOutput));
 
       assert.deepStrictEqual(updates, []);
+      // Once, not once per frame: a mic streaming to the wrong function sends 50 a second.
       assert.deepStrictEqual(socket.sent, [{ error: { field: null, message: "this function takes no binary frames" } }]);
     });
 
