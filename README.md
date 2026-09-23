@@ -256,6 +256,43 @@ export class App {
 
 on the wire, a binary frame is one item of the schema's single binary live field (`pcm16(z, rate, channels)` or `media(z, contentType)`); a json text frame is a partial object keyed by field name: an item of a live field (`{"events": {"type": "interrupt"}}`) or a new value for an ordinary field (`{"effect": "robot"}`). frames that do not fit the input schema are answered with `{"error": {"field", "message"}}` and skipped. `live.send({...})` sends the output binary field as a binary frame and everything else as one json frame; unknown output fields throw.
 
+### progress from a stream function
+
+a stream function may also be an async generator (`async *dictate(input, socket)`). each yield is a progress snapshot of the task's output: it replaces the task's `output` and reaches clients as a task update (sse `/tasks/{id}/stream`), not over the socket — the socket carries the live fields. yield cumulative snapshots; the last yield is the result, so `output_meta` goes there, and a generator that ends without yielding fails the task (`NoOutput`).
+
+```javascript
+export const DictateInput = z.object({
+  audio: createStreamSchema(z, pcm16(z, 16000)),   // mic frames arrive over the socket
+});
+
+export const DictateOutput = z.object({
+  text: z.string().default(""),
+  partial: z.boolean().default(true),
+});
+
+export class App {
+  async *dictate(input, socket) {
+    const live = new Live(socket, input, DictateInput, DictateOutput);
+    let window = Buffer.alloc(0);
+    for await (const { field, value } of live) {
+      if (field === "audio") {
+        window = Buffer.concat([window, value]);
+        if (window.length >= 32000) {                       // one second of 16 khz s16le
+          yield { text: await this.transcribe(window) };    // the transcript so far
+        }
+      }
+    }
+    yield {
+      text: await this.transcribe(window),
+      partial: false,
+      output_meta: { inputs: [], outputs: [] },
+    };
+  }
+}
+```
+
+the client closing the socket ends the `for await`, so the final yield goes after the loop. both channels can be used at once: `live.send({ text })` pushes a partial over the socket for the lowest latency, while the yields build the transcript the task stores.
+
 ## requirements
 
 - node.js 18.0.0 or higher

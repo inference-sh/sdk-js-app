@@ -214,6 +214,11 @@ function firstIssue(result: any): string {
  *
  * A frame that does not fit the input schema is answered with
  * `{"error": {"field": ..., "message": ...}}` and skipped; the stream goes on.
+ *
+ * The function may instead be an async generator (`async *talk(inputData, socket)`):
+ * each yield is a cumulative snapshot of the task's output, sent as a task update
+ * rather than over the socket, and the last yield (after the loop, once the client
+ * closes) is the result.
  */
 export class Live {
   readonly socket: Socket;
