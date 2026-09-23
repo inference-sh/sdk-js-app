@@ -34,6 +34,12 @@ export interface Socket {
   readonly id: string;
   metadata: Record<string, unknown>;
 
+  /** How many binary frames the kernel has dropped because the app read too slowly. */
+  readonly dropped: number;
+
+  /** The most binary frames kept queued (256); null keeps every one of them. */
+  binaryBacklog: number | null;
+
   /** True once the client is gone or the app closed the socket. */
   readonly closed: boolean;
 

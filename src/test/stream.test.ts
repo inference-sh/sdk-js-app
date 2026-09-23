@@ -26,6 +26,8 @@ class FakeSocket implements Socket {
   readonly id = "fake";
   metadata: Record<string, unknown> = {};
   closed = false;
+  readonly dropped = 0;
+  binaryBacklog: number | null = 256;
   sent: unknown[] = [];
   private frames: Frame[];
 

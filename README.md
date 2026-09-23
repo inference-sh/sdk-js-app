@@ -293,6 +293,10 @@ export class App {
 
 the client closing the socket ends the `for await`, so the final yield goes after the loop. both channels can be used at once: `live.send({ text })` pushes a partial over the socket for the lowest latency, while the yields build the transcript the task stores.
 
+### frames dropped when the app falls behind
+
+binary frames are perishable media, so the kernel keeps at most 256 of them queued for the app (about five seconds of 20 ms audio) and drops the oldest when the app reads slower than the client sends — latency stays bounded instead of growing for ever. text frames (commands and patches) are never dropped. `socket.dropped` counts the binary frames lost so far, and `socket.binaryBacklog = null` turns dropping off when every frame matters (a file sent in chunks).
+
 ## requirements
 
 - node.js 18.0.0 or higher
