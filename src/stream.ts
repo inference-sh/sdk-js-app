@@ -55,6 +55,12 @@ import type { Socket } from "./socket.js";
 export const STREAM_SCHEMA_MARKER = Symbol.for("inferencesh.streamSchema");
 
 /**
+ * A control frame, `{"$clear": "audio"}`: drop what has been buffered of a
+ * live output field. Reserved keys start with `$`, which no field name can.
+ */
+export const CLEAR_KEY = "$clear";
+
+/**
  * Marks a binary item schema. The value on `_def` is the content type.
  * The kernel's zodToJsonSchema reads this and emits
  * `{type: "string", format: "binary", contentMediaType}`.
@@ -229,6 +235,7 @@ export class Live {
   private readonly inBinary: string | null;
   private readonly outShape: Record<string, any>;
   private readonly outBinary: string | null;
+  private readonly outLive: Record<string, any>;
   private refusedBinary = false;
 
   constructor(socket: Socket, inputData: Record<string, unknown>, inputSchema: any, outputSchema: any) {
@@ -239,6 +246,7 @@ export class Live {
     this.inBinary = binaryField(inputSchema);
     this.outShape = shapeOf(outputSchema);
     this.outBinary = binaryField(outputSchema);
+    this.outLive = liveFields(outputSchema);
   }
 
   async *[Symbol.asyncIterator](): AsyncGenerator<Update, void, undefined> {
@@ -321,6 +329,17 @@ export class Live {
    * `await live.send({ effect: "echo" })` are JSON frames. Keys in one call
    * other than the binary field go out together as one JSON frame.
    */
+  /**
+   * Tell the caller to drop what it has buffered of a live output field:
+   * the queued audio of an answer the user just talked over.
+   */
+  async clear(field: string): Promise<void> {
+    if (!Object.prototype.hasOwnProperty.call(this.outLive, field)) {
+      throw new Error(`the output schema has no live field "${field}"`);
+    }
+    await this.socket.send({ [CLEAR_KEY]: field });
+  }
+
   async send(fields: Record<string, unknown>): Promise<void> {
     const patch: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(fields)) {

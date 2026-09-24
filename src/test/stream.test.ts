@@ -205,6 +205,16 @@ for (const [label, z] of [
       assert.deepStrictEqual([...(updates[0].value as Buffer)], [7]);
     });
 
+    it("clear() tells the caller to drop a live output field", async () => {
+      const socket = new FakeSocket([]);
+      const live = new Live(socket, {}, TalkInput, TalkOutput);
+
+      await live.clear("audio");
+      await assert.rejects(live.clear("voice"), /no live field "voice"/);
+
+      assert.deepStrictEqual(socket.sent, [{ $clear: "audio" }]);
+    });
+
     it("send() routes the binary field to a binary frame and the rest to one JSON frame", async () => {
       const socket = new FakeSocket([]);
       const live = new Live(socket, {}, TalkInput, TalkOutput);
