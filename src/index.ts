@@ -16,6 +16,7 @@ export {
   binaryField,
   STREAM_SCHEMA_MARKER,
   CLEAR_KEY,
+  ERROR_KEY,
   BINARY_SCHEMA_MARKER,
 } from "./stream.js";
 export type { Update } from "./stream.js";

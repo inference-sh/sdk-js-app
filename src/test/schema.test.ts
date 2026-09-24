@@ -9,6 +9,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { File } from "../file.js";
 import { createFileSchema, isFileSchema, FILE_SCHEMA_MARKER } from "../schema.js";
+import { z as z3 } from "zod3";
 
 // Import zod (devDependency)
 import { z } from "zod";
@@ -76,6 +77,16 @@ describe("createFileSchema", () => {
     assert.strictEqual(isFileSchema(fileSchema), true);
     assert.strictEqual(isFileSchema(stringSchema), false);
     assert.strictEqual(isFileSchema(numberSchema), false);
+  });
+
+  it("isFileSchema sees a file field through its wrappers, in zod v4 and v3", () => {
+    for (const zod of [z, z3]) {
+      const file = createFileSchema(zod);
+      assert.strictEqual(isFileSchema(file.optional()), true);
+      assert.strictEqual(isFileSchema(file.nullable()), true);
+      assert.strictEqual(isFileSchema(file.optional().describe("an image")), true);
+      assert.strictEqual(isFileSchema(zod.string().optional()), false);
+    }
   });
 
   it("isFileSchema returns false for non-schemas", () => {

@@ -173,15 +173,15 @@ for (const [label, z] of [
       assert.strictEqual(updates.length, 1, "the stream goes on after bad frames");
       assert.strictEqual(updates[0].field, "audio");
       assert.strictEqual(data.voice, "ara", "a refused value is not applied");
-      const errors = socket.sent as { error: { field: string | null; message: string } }[];
+      const errors = socket.sent as { $error: { field: string | null; message: string } }[];
       assert.deepStrictEqual(
-        errors.map((e) => e.error.field),
+        errors.map((e) => e.$error.field),
         ["voice", "nope", null, null, "audio", "events"],
       );
-      assert.ok(errors.every((e) => typeof e.error.message === "string" && e.error.message.length > 0));
-      assert.strictEqual(errors[1].error.message, "no such field");
-      assert.strictEqual(errors[2].error.message, "a text frame is a JSON object keyed by field name");
-      assert.strictEqual(errors[4].error.message, "send this field's items as binary frames");
+      assert.ok(errors.every((e) => typeof e.$error.message === "string" && e.$error.message.length > 0));
+      assert.strictEqual(errors[1].$error.message, "no such field");
+      assert.strictEqual(errors[2].$error.message, "a text frame is a JSON object keyed by field name");
+      assert.strictEqual(errors[4].$error.message, "send this field's items as binary frames");
     });
 
     it("refuses binary frames when the input has no binary field", async () => {
@@ -192,7 +192,7 @@ for (const [label, z] of [
 
       assert.deepStrictEqual(updates, []);
       // Once, not once per frame: a mic streaming to the wrong function sends 50 a second.
-      assert.deepStrictEqual(socket.sent, [{ error: { field: null, message: "this function takes no binary frames" } }]);
+      assert.deepStrictEqual(socket.sent, [{ $error: { field: null, message: "this function takes no binary frames" } }]);
     });
 
     it("reads through recv() when the socket has no async iterator", async () => {
@@ -203,6 +203,19 @@ for (const [label, z] of [
 
       assert.strictEqual(updates.length, 1);
       assert.deepStrictEqual([...(updates[0].value as Buffer)], [7]);
+    });
+
+    it("error() tells the caller without ending the stream", async () => {
+      const socket = new FakeSocket([]);
+      const live = new Live(socket, {}, TalkInput, TalkOutput);
+
+      await live.error("Grok: unknown voice");
+      await live.error("too fast", "gain");
+
+      assert.deepStrictEqual(socket.sent, [
+        { $error: { field: null, message: "Grok: unknown voice" } },
+        { $error: { field: "gain", message: "too fast" } },
+      ]);
     });
 
     it("clear() tells the caller to drop a live output field", async () => {

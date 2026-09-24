@@ -47,6 +47,7 @@
  */
 
 import type { Socket } from "./socket.js";
+import { findMarker } from "./zod-walk.js";
 
 /**
  * Marks a live field's schema. The value on `_def` is the item schema.
@@ -54,11 +55,16 @@ import type { Socket } from "./socket.js";
  */
 export const STREAM_SCHEMA_MARKER = Symbol.for("inferencesh.streamSchema");
 
-/**
- * A control frame, `{"$clear": "audio"}`: drop what has been buffered of a
- * live output field. Reserved keys start with `$`, which no field name can.
- */
+// Control frames. Reserved keys start with `$`, which no field name can, so a
+// control frame is never mistaken for an output field.
+
+/** `{"$clear": "audio"}`: drop what has been buffered of a live output field. */
 export const CLEAR_KEY = "$clear";
+/**
+ * `{"$error": {"field": ..., "message": ...}}`: a refused frame, or anything
+ * else the caller should be told went wrong. The stream goes on.
+ */
+export const ERROR_KEY = "$error";
 
 /**
  * Marks a binary item schema. The value on `_def` is the content type.
@@ -114,33 +120,7 @@ export interface Update {
 
 // --- schema walking (zod v3 and v4 `_def` shapes) ---------------------------
 
-/** Inner schemas of a wrapper def, in the order worth checking. */
-function innerSchemas(def: any): any[] {
-  const out: any[] = [];
-  // v3 + v4: optional / default / nullable / catch / readonly
-  if (def.innerType) out.push(def.innerType);
-  // v3: effects (preprocess / transform / refine), v4: some wrappers
-  if (def.schema) out.push(def.schema);
-  if (def.inner) out.push(def.inner);
-  // v4: pipe (preprocess, transform) — in, then out
-  if (def.in) out.push(def.in);
-  if (def.out) out.push(def.out);
-  return out;
-}
 
-/** The marker's value on the schema or any schema it wraps, or undefined. */
-function findMarker(schema: any, marker: symbol, seen = new Set<any>()): unknown {
-  if (!schema || typeof schema !== "object" || seen.has(schema)) return undefined;
-  seen.add(schema);
-  const def = schema._def;
-  if (!def || typeof def !== "object") return undefined;
-  if (Object.prototype.hasOwnProperty.call(def, marker)) return def[marker];
-  for (const inner of innerSchemas(def)) {
-    const found = findMarker(inner, marker, seen);
-    if (found !== undefined) return found;
-  }
-  return undefined;
-}
 
 /** The fields of a zod object schema. v3: `_def.shape()`, v4: `_def.shape`. */
 function shapeOf(objectSchema: any): Record<string, any> {
@@ -318,7 +298,15 @@ export class Live {
   }
 
   private async refuse(field: string | null, message: string): Promise<void> {
-    await this.socket.send({ error: { field, message } });
+    await this.error(message, field);
+  }
+
+  /**
+   * Tell the caller something went wrong without ending the stream: a
+   * provider error, or why the session is about to end.
+   */
+  async error(message: string, field: string | null = null): Promise<void> {
+    await this.socket.send({ [ERROR_KEY]: { field, message } });
   }
 
   /**

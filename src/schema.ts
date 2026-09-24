@@ -8,6 +8,7 @@
  */
 
 import { File } from "./file.js";
+import { findMarker } from "./zod-walk.js";
 
 // We don't import zod directly to avoid version conflicts.
 // Instead, apps provide their own zod and we work with the schema structure.
@@ -43,18 +44,9 @@ export function createFileSchema(z: any) {
 }
 
 /**
- * Check if a Zod schema is a file schema (created by createFileSchema).
+ * Check if a Zod schema is a file schema (created by createFileSchema),
+ * through any wrapper (optional, default, nullable, ...) in zod v3 or v4.
  */
 export function isFileSchema(schema: any): boolean {
-  if (!schema || typeof schema !== "object") return false;
-
-  // Check for our marker
-  if (schema._def && schema._def[FILE_SCHEMA_MARKER]) return true;
-
-  // Check inner type for transforms/effects
-  if (schema._def?.typeName === "ZodEffects" && schema._def.schema) {
-    return isFileSchema(schema._def.schema);
-  }
-
-  return false;
+  return findMarker(schema, FILE_SCHEMA_MARKER) === true;
 }
