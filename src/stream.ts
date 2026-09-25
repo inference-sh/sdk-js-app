@@ -56,7 +56,9 @@ import { findMarker } from "./zod-walk.js";
 export const STREAM_SCHEMA_MARKER = Symbol.for("inferencesh.streamSchema");
 
 // Control frames. Reserved keys start with `$`, which no field name can, so a
-// control frame is never mistaken for an output field.
+// control frame is never mistaken for an output field. sdk-js
+// (src/live/protocol.ts) and sdk-py (inferencesh/models/stream.py) mirror
+// these; change all three together.
 
 /** `{"$clear": "audio"}`: drop what has been buffered of a live output field. */
 export const CLEAR_KEY = "$clear";
@@ -199,7 +201,7 @@ function firstIssue(result: any): string {
  * ```
  *
  * A frame that does not fit the input schema is answered with
- * `{"error": {"field": ..., "message": ...}}` and skipped; the stream goes on.
+ * `{"$error": {"field": ..., "message": ...}}` and skipped; the stream goes on.
  *
  * The function may instead be an async generator (`async *talk(inputData, socket)`):
  * each yield is a cumulative snapshot of the task's output, sent as a task update
