@@ -47,7 +47,12 @@ export interface OutputMeta {
 /**
  * MetaItemType is the type discriminator for MetaItem
  */
-export type MetaItemType = string;
+export type MetaItemType =
+  | "text"
+  | "image"
+  | "video"
+  | "audio"
+  | "raw";
 export const MetaItemTypeText: MetaItemType = "text";
 export const MetaItemTypeImage: MetaItemType = "image";
 export const MetaItemTypeVideo: MetaItemType = "video";
@@ -56,7 +61,12 @@ export const MetaItemTypeRaw: MetaItemType = "raw";
 /**
  * VideoResolution represents standard video resolution presets
  */
-export type VideoResolution = string;
+export type VideoResolution =
+  | "480p"
+  | "720p"
+  | "1080p"
+  | "1440p"
+  | "4k";
 export const VideoRes480P: VideoResolution = "480p";
 export const VideoRes720P: VideoResolution = "720p";
 export const VideoRes1080P: VideoResolution = "1080p";
