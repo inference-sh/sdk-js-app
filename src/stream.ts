@@ -312,14 +312,6 @@ export class Live {
   }
 
   /**
-   * Send items of live output fields, or new values of ordinary ones.
-   *
-   * `await live.send({ audio: pcm })` is a binary frame;
-   * `await live.send({ transcript: word })` and
-   * `await live.send({ effect: "echo" })` are JSON frames. Keys in one call
-   * other than the binary field go out together as one JSON frame.
-   */
-  /**
    * Tell the caller to drop what it has buffered of a live output field:
    * the queued audio of an answer the user just talked over.
    */
@@ -330,6 +322,14 @@ export class Live {
     await this.socket.send({ [CLEAR_KEY]: field });
   }
 
+  /**
+   * Send items of live output fields, or new values of ordinary ones.
+   *
+   * `await live.send({ audio: pcm })` is a binary frame;
+   * `await live.send({ transcript: word })` and
+   * `await live.send({ effect: "echo" })` are JSON frames. Keys in one call
+   * other than the binary field go out together as one JSON frame.
+   */
   async send(fields: Record<string, unknown>): Promise<void> {
     const patch: Record<string, unknown> = {};
     for (const [key, value] of Object.entries(fields)) {
