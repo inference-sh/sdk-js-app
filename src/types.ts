@@ -11,7 +11,6 @@ export interface RequestMetadata {
   worker_id: string;
   app_id: string;
   app_version_id: string;
-  app_variant: string;
   gpu_ids: string[];
   task_id: string;
   team_id: string;
