@@ -16,6 +16,49 @@ export interface RequestMetadata {
   team_id: string;
   user_id: string;
 }
+/**
+ * CredentialRequirement is an entry under credentials: in inf.yml: keys an
+ * app needs that belong to a provider. Provider names whose credential
+ * supplies them; Secrets lists the keys to inject from it (an API key
+ * credential), Scopes what to ask for (an OAuth one).
+ * 	credentials:
+ * 	  - provider: acme
+ * 	    name: Acme CRM
+ * 	    website: acme.com
+ * 	    secrets: [ACME_API_KEY]
+ * Key is a capability of a provider the platform defines ("x.tweet.read",
+ * "google.sheets"): an OAuth grant with the scopes it implies. An entry sets
+ * Provider, Key, or both; with both, Key decides how it is resolved.
+ */
+export interface CredentialRequirement {
+  provider?: string;
+  /**
+   * Name and Website describe a provider the platform does not list: the
+   * name its credential is shown under and the site its logo comes from.
+   */
+  name?: string;
+  website?: string;
+  key?: string;
+  description?: string;
+  optional?: boolean;
+  secrets?: string[];
+  scopes?: string[];
+}
+/**
+ * ToolAnnotations describes tool behavior so clients can make trust and UX
+ * decisions (e.g., auto-approve read-only tools). All fields are optional hints.
+ */
+export interface ToolAnnotations {
+  /**
+   * Title is the human-readable name clients and the Claude directory show.
+   * It repeats MCPTool.Title because some clients read only this one.
+   */
+  title?: string;
+  readOnlyHint?: boolean;
+  destructiveHint?: boolean;
+  idempotentHint?: boolean;
+  openWorldHint?: boolean;
+}
 export interface AppSDKTypes {
 }
 /**
