@@ -21,6 +21,10 @@ export {
 } from "./stream.js";
 export type { Update } from "./stream.js";
 
+// Per-function metadata: credentials and annotations (<PascalName>Meta exports)
+export { meta } from "./meta.js";
+export type { FunctionMeta } from "./meta.js";
+
 // Storage directories
 export { StorageDir, ensureDir } from "./storage.js";
 export type { StorageDirValue } from "./storage.js";

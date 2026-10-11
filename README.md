@@ -23,6 +23,7 @@ npm install @inferencesh/app
 | `download()` | download a url to a directory with caching |
 | `textMeta`, `imageMeta`, `videoMeta`, `audioMeta`, `rawMeta` | output metadata factories for usage-based pricing |
 | `createStreamSchema`, `pcm16`, `media`, `Live` | live fields for stream functions — values that flow over the socket while the task runs |
+| `meta()` | per-function credentials and annotations (`<Name>Meta` exports) |
 
 ## file handling
 
@@ -296,6 +297,27 @@ the client closing the socket ends the `for await`, so the final yield goes afte
 ### frames dropped when the app falls behind
 
 binary frames are perishable media, so the kernel keeps at most 256 of them queued for the app (about five seconds of 20 ms audio) and drops the oldest when the app reads slower than the client sends — latency stays bounded instead of growing for ever. text frames (commands and patches) are never dropped. `socket.dropped` counts the binary frames lost so far, and `socket.binaryBacklog = null` turns dropping off when every frame matters (a file sent in chunks).
+
+## per-function credentials and annotations
+
+export `<PascalName>Meta` next to a function's input and output schemas. `credentials` narrows what the function needs at run time (each entry must also be in inf.yml's `credentials:`; a function without it gets the app-wide list). `annotations` are hints about what it does.
+
+```javascript
+import { meta } from "@inferencesh/app";
+
+export const CreateEventInput = z.object({ title: z.string() });
+export const CreateEventOutput = z.object({ id: z.string() });
+export const CreateEventMeta = meta({
+  credentials: [{ key: "google.calendar.events" }],
+  annotations: { readOnlyHint: false, destructiveHint: false },
+});
+
+export class App {
+  async createEvent(input) { /* ... */ }
+}
+```
+
+`meta()` returns its argument unchanged; it gives editors the `CredentialRequirement` and `ToolAnnotations` types (add `// @ts-check` to a `.js` file to get errors, not only completions).
 
 ## requirements
 
