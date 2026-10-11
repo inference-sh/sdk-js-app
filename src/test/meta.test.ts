@@ -43,12 +43,29 @@ describe("meta", () => {
     assert.strictEqual(m.annotations, annotations);
   });
 
-  it("rejects unknown keys and wrong types at compile time", () => {
+  it("rejects unknown keys and wrong types at compile time and at run time", () => {
     // @ts-expect-error: misspelled key
-    meta({ annotation: { readOnlyHint: true } });
+    assert.throws(() => meta({ annotation: { readOnlyHint: true } }), /unknown keys \["annotation"\]/);
     // @ts-expect-error: hints are booleans
-    meta({ annotations: { readOnlyHint: "yes" } });
+    assert.throws(() => meta({ annotations: { readOnlyHint: "yes" } }), TypeError);
     // @ts-expect-error: credentials is a list
-    meta({ credentials: { key: "google.calendar" } });
+    assert.throws(() => meta({ credentials: { key: "google.calendar" } }), TypeError);
+    // @ts-expect-error: misspelled credential key
+    assert.throws(() => meta({ credentials: [{ kye: "x" }] }), /unknown keys \["kye"\]/);
+    // @ts-expect-error: secrets is a list of strings
+    assert.throws(() => meta({ credentials: [{ provider: "acme", secrets: "ACME_API_KEY" }] }), TypeError);
+  });
+
+  it("rejects an empty credentials list, as sdk-py does", () => {
+    assert.throws(() => meta({ credentials: [] }), /empty list; omit credentials to use the app-wide list/);
+  });
+
+  it("rejects a credential with neither key nor provider", () => {
+    assert.throws(() => meta({ credentials: [{ name: "Acme" }] }), /set 'key'.*or 'provider'/);
+  });
+
+  it("accepts a null hint as undeclared", () => {
+    const m = { annotations: { readOnlyHint: null as unknown as boolean } };
+    assert.strictEqual(meta(m), m);
   });
 });

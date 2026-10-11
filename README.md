@@ -317,7 +317,7 @@ export class App {
 }
 ```
 
-`meta()` returns its argument unchanged; it gives editors the `CredentialRequirement` and `ToolAnnotations` types (add `// @ts-check` to a `.js` file to get errors, not only completions).
+`meta()` returns its argument unchanged after the same checks as sdk-py's `@function` (it throws on an empty `credentials` list, unknown keys, wrong value types, or a credential with neither `key` nor `provider`). it gives editors the `CredentialRequirement` and `ToolAnnotations` types (add `// @ts-check` to a `.js` file to get errors, not only completions).
 
 ## requirements
 
