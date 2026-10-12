@@ -67,6 +67,12 @@ export interface AppSDKTypes {
 export interface MetaItem {
   type: MetaItemType;
   tokens?: number /* int */;
+  /**
+   * CachedTokens and CacheWriteTokens are the parts of Tokens (on an input
+   * text item) read from and written to the provider's prompt cache.
+   */
+  cached_tokens?: number /* int */;
+  cache_write_tokens?: number /* int */;
   width?: number /* int */;
   height?: number /* int */;
   resolution_mp?: number /* float64 */;
