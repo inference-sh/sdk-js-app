@@ -22,8 +22,8 @@ export {
 export type { Update } from "./stream.js";
 
 // Per-function metadata: credentials and annotations (<PascalName>Meta exports)
-export { meta } from "./meta.js";
-export type { FunctionMeta } from "./meta.js";
+export { meta, normalizeCredentials, CREDENTIAL_KEYS, PROVIDER_SEED_KEYS } from "./meta.js";
+export type { FunctionMeta, NormalizedFunctionMeta, CredentialEntry, CredentialsDeclaration } from "./meta.js";
 
 // Storage directories
 export { StorageDir, ensureDir } from "./storage.js";

@@ -19,7 +19,31 @@
  * ```
  */
 
-import type { CredentialRequirement, ToolAnnotations } from "./types.js";
+import type { CredentialRequirement, ProviderSeed, ToolAnnotations } from "./types.js";
+
+/**
+ * One credential entry as an app may write it: the current keys, plus the
+ * older spellings (`provider` as a string, `key` as a capability, `name`
+ * and `website`) which are folded into the current ones.
+ */
+export interface CredentialEntry extends Omit<CredentialRequirement, "provider"> {
+  provider?: string | ProviderSeed;
+  /** Older: a capability such as `google.calendar.events`. */
+  key?: string;
+  /** Older: the provider's display name (now `provider.name`). */
+  name?: string;
+  /** Older: the provider's site (now `provider.website`). */
+  website?: string;
+}
+
+/**
+ * The credentials a function needs, in any accepted form: a map keyed by
+ * credential slug, or a list of entries or bare slugs (a dotted string is a
+ * capability).
+ */
+export type CredentialsDeclaration =
+  | Record<string, CredentialEntry | null | undefined>
+  | Array<string | CredentialEntry>;
 
 export interface FunctionMeta {
   /**
@@ -27,30 +51,70 @@ export interface FunctionMeta {
    * covered by the app-wide `credentials:` in inf.yml. A function without
    * this gets the app-wide list.
    */
-  credentials?: CredentialRequirement[];
+  credentials?: CredentialsDeclaration;
   /** Hints about the function's behavior (read-only, destructive, ...). */
   annotations?: ToolAnnotations;
 }
 
-const CREDENTIAL_STR_KEYS = ["provider", "name", "website", "key", "description"];
-const CREDENTIAL_LIST_KEYS = ["secrets", "scopes"];
-const CREDENTIAL_KEYS = [...CREDENTIAL_STR_KEYS, "optional", ...CREDENTIAL_LIST_KEYS];
+/** What `meta()` returns: credentials normalised to the shape the engine writes. */
+export interface NormalizedFunctionMeta {
+  credentials?: CredentialRequirement[];
+  annotations?: ToolAnnotations;
+}
+
+// The entry as written to functions_schema.json, in this key order.
+export const CREDENTIAL_KEYS = ["slug", "capabilities", "description", "optional", "secrets", "scopes", "provider", "auth"] as const;
+export const PROVIDER_SEED_KEYS = ["slug", "name", "description", "website", "logo_uri", "docs_uri", "tos_uri", "policy_uri"] as const;
+// Older spellings, read and folded into the keys above.
+const LEGACY_CREDENTIAL_KEYS = ["key", "name", "website"];
+const CREDENTIAL_STR_KEYS = ["slug", "description"];
+const CREDENTIAL_LIST_KEYS = ["capabilities", "secrets", "scopes"];
 const ANNOTATION_HINT_KEYS = ["readOnlyHint", "destructiveHint", "idempotentHint", "openWorldHint"];
 const ANNOTATION_KEYS = ["title", ...ANNOTATION_HINT_KEYS];
 
 const isObject = (v: unknown): v is Record<string, unknown> =>
   v !== null && typeof v === "object" && !Array.isArray(v);
 const typeName = (v: unknown) => (v === null ? "null" : Array.isArray(v) ? "array" : typeof v);
-const unknownKeys = (obj: object, allowed: string[]) => Object.keys(obj).filter((k) => !allowed.includes(k)).sort();
+const unknownKeys = (obj: object, allowed: readonly string[]) =>
+  Object.keys(obj).filter((k) => !allowed.includes(k)).sort();
 
-function checkCredential(i: number, entry: unknown): void {
-  const where = `meta() credentials[${i}]`;
-  if (!isObject(entry)) throw new TypeError(`${where}: expected an object, got ${typeName(entry)}`);
-  const unknown = unknownKeys(entry, CREDENTIAL_KEYS);
+function strList(where: string, k: string, v: unknown): string[] {
+  if (!(Array.isArray(v) && v.every((s) => typeof s === "string"))) {
+    throw new TypeError(`${where}.${k}: expected a list of strings`);
+  }
+  return [...v];
+}
+
+/** A bare string: a credential slug, or a capability when dotted. */
+function entryFromRef(ref: string): CredentialEntry {
+  return ref.includes(".") ? { key: ref } : { slug: ref };
+}
+
+function checkProviderSeed(where: string, seed: unknown): ProviderSeed {
+  if (!isObject(seed)) throw new TypeError(`${where}: expected an object, got ${typeName(seed)}`);
+  const unknown = unknownKeys(seed, PROVIDER_SEED_KEYS);
+  if (unknown.length > 0) {
+    throw new Error(`${where}: unknown keys ${JSON.stringify(unknown)}; allowed: ${JSON.stringify(PROVIDER_SEED_KEYS)}`);
+  }
+  const out: Record<string, string> = {};
+  for (const k of PROVIDER_SEED_KEYS) {
+    const v = seed[k];
+    if (v === undefined) continue;
+    if (typeof v !== "string") throw new TypeError(`${where}.${k}: expected a string, got ${typeName(v)}`);
+    if (v) out[k] = v;
+  }
+  return out as ProviderSeed;
+}
+
+/** One entry, in any accepted spelling, as the normalised requirement. */
+function checkCredential(where: string, raw: unknown, slugFromKey = ""): CredentialRequirement {
+  const entry: unknown = typeof raw === "string" ? entryFromRef(raw) : raw;
+  if (!isObject(entry)) throw new TypeError(`${where}: expected an object or a slug, got ${typeName(entry)}`);
+  const unknown = unknownKeys(entry, [...CREDENTIAL_KEYS, ...LEGACY_CREDENTIAL_KEYS]);
   if (unknown.length > 0) {
     throw new Error(`${where}: unknown keys ${JSON.stringify(unknown)}; allowed: ${JSON.stringify(CREDENTIAL_KEYS)}`);
   }
-  for (const k of CREDENTIAL_STR_KEYS) {
+  for (const k of [...CREDENTIAL_STR_KEYS, ...LEGACY_CREDENTIAL_KEYS]) {
     if (entry[k] !== undefined && typeof entry[k] !== "string") {
       throw new TypeError(`${where}.${k}: expected a string, got ${typeName(entry[k])}`);
     }
@@ -58,15 +122,79 @@ function checkCredential(i: number, entry: unknown): void {
   if (entry.optional !== undefined && typeof entry.optional !== "boolean") {
     throw new TypeError(`${where}.optional: expected a boolean, got ${typeName(entry.optional)}`);
   }
-  for (const k of CREDENTIAL_LIST_KEYS) {
+
+  let slug = typeof entry.slug === "string" ? entry.slug : "";
+  let seed: Record<string, string> = {};
+  const provider = entry.provider;
+  if (typeof provider === "string") {
+    // The older form: provider was the credential slug.
+    if (slug && provider !== slug) throw new Error(`${where}: slug '${slug}' and provider '${provider}' disagree`);
+    slug = provider;
+  } else if (provider !== undefined && provider !== null) {
+    seed = { ...(checkProviderSeed(`${where}.provider`, provider) as Record<string, string>) };
+  }
+  for (const k of ["name", "website"]) {
     const v = entry[k];
-    if (v !== undefined && !(Array.isArray(v) && v.every((s) => typeof s === "string"))) {
-      throw new TypeError(`${where}.${k}: expected a list of strings`);
+    if (typeof v === "string" && v && !seed[k]) seed[k] = v;
+  }
+
+  const capabilities = entry.capabilities !== undefined ? strList(where, "capabilities", entry.capabilities) : [];
+  const key = typeof entry.key === "string" ? entry.key : "";
+  if (key) {
+    if (key.includes(".") && !capabilities.includes(key)) capabilities.push(key);
+    if (!slug) slug = key.split(".", 1)[0];
+  }
+  if (slugFromKey) {
+    if (slug && slug !== slugFromKey) throw new Error(`${where}: entry says slug '${slug}' but is keyed as '${slugFromKey}'`);
+    slug = slugFromKey;
+  }
+  if (!slug) {
+    throw new Error(`${where}: set 'slug' (the credential slug, like 'slack') or a capability under 'capabilities'`);
+  }
+  for (const capability of capabilities) {
+    if (!capability.includes(".")) throw new Error(`${where}: capability '${capability}' is not <slug>.<name>`);
+  }
+  const auth = entry.auth;
+  if (auth !== undefined && auth !== null && !isObject(auth)) {
+    throw new TypeError(`${where}.auth: expected an object, got ${typeName(auth)}`);
+  }
+
+  const out: CredentialRequirement = { slug };
+  if (capabilities.length > 0) out.capabilities = capabilities;
+  if (typeof entry.description === "string" && entry.description) out.description = entry.description;
+  if (entry.optional !== undefined) out.optional = entry.optional as boolean;
+  for (const k of ["secrets", "scopes"] as const) {
+    if (entry[k] !== undefined) {
+      const v = strList(where, k, entry[k]);
+      if (v.length > 0) out[k] = v;
     }
   }
-  if (!entry.key && !entry.provider) {
-    throw new Error(`${where}: set 'key' (a capability like 'google.calendar.events') or 'provider'`);
+  if (Object.keys(seed).length > 0) out.provider = seed as ProviderSeed;
+  if (auth) out.auth = { ...(auth as object) } as CredentialRequirement["auth"];
+  return out;
+}
+
+/**
+ * Every accepted form of a credentials declaration as the list the engine
+ * writes: entries in canonical key order, legacy keys folded in.
+ */
+export function normalizeCredentials(credentials: unknown, where = "meta() credentials"): CredentialRequirement[] {
+  if (isObject(credentials)) {
+    const slugs = Object.keys(credentials);
+    if (slugs.length === 0) throw new Error(`${where}: empty; omit credentials to use the app-wide list from inf.yml`);
+    return slugs.map((slug) => {
+      const entry = credentials[slug];
+      if (entry !== undefined && entry !== null && !isObject(entry)) {
+        throw new TypeError(`${where}['${slug}']: expected an object, got ${typeName(entry)}`);
+      }
+      return checkCredential(`${where}['${slug}']`, entry ?? {}, slug);
+    });
   }
+  if (!Array.isArray(credentials)) {
+    throw new TypeError(`${where}: expected an object keyed by slug or a list of entries, got ${typeName(credentials)}`);
+  }
+  if (credentials.length === 0) throw new Error(`${where}: empty list; omit credentials to use the app-wide list from inf.yml`);
+  return credentials.map((c, i) => checkCredential(`${where}[${i}]`, c));
 }
 
 function checkAnnotations(annotations: unknown): void {
@@ -89,30 +217,25 @@ function checkAnnotations(annotations: unknown): void {
 }
 
 /**
- * Declares a function's metadata and returns `m` unchanged. Editors
+ * Declares a function's metadata. Credentials come back normalised to the
+ * shape the engine writes (keyed by slug, legacy keys folded in), the same
+ * as sdk-py's `@function`; annotations are returned as given. Editors
  * type-check the declaration, plain `.js` apps included (with `// @ts-check`).
  *
- * Throws on a malformed declaration, at import time, with the same checks as
- * sdk-py's `@function`: an empty `credentials` list (omit it to use the
- * app-wide list from inf.yml), unknown keys, wrong value types, or a
- * credential with neither `key` nor `provider`. A null hint means
- * "not declared"; the schema omits it.
+ * Throws on a malformed declaration, at import time: an empty `credentials`
+ * declaration (omit it to use the app-wide list from inf.yml), unknown keys,
+ * wrong value types, or an entry with neither a slug nor a capability. A
+ * null hint means "not declared"; the schema omits it.
  */
-export function meta(m: FunctionMeta): FunctionMeta {
+export function meta(m: FunctionMeta): NormalizedFunctionMeta {
   if (!isObject(m)) throw new TypeError(`meta(): expected an object, got ${typeName(m)}`);
   const unknown = unknownKeys(m, ["credentials", "annotations"]);
   if (unknown.length > 0) {
     throw new Error(`meta(): unknown keys ${JSON.stringify(unknown)}; allowed: ["credentials","annotations"]`);
   }
-  if (m.credentials !== undefined) {
-    if (!Array.isArray(m.credentials)) {
-      throw new TypeError(`meta() credentials: expected a list of objects, got ${typeName(m.credentials)}`);
-    }
-    if (m.credentials.length === 0) {
-      throw new Error("meta() credentials: empty list; omit credentials to use the app-wide list from inf.yml");
-    }
-    m.credentials.forEach((c, i) => checkCredential(i, c));
-  }
   if (m.annotations !== undefined) checkAnnotations(m.annotations);
-  return m;
+  if (m.credentials === undefined) return m as NormalizedFunctionMeta;
+  const out: NormalizedFunctionMeta = { credentials: normalizeCredentials(m.credentials) };
+  if (m.annotations !== undefined) out.annotations = m.annotations as ToolAnnotations;
+  return out;
 }
