@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { createWriteStream, existsSync, mkdirSync, readdirSync, statSync, renameSync, unlinkSync, copyFileSync, writeFileSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, readdirSync, statSync, renameSync, unlinkSync, copyFileSync, writeFileSync, utimesSync } from "node:fs";
 import { basename, resolve, join } from "node:path";
 import { homedir } from "node:os";
 import { get as httpsGet } from "node:https";
@@ -282,6 +282,21 @@ export class File {
     return join(hashDir, fname);
   }
 
+  /**
+   * Mark a cached file used, so the engine expires inputs by last use.
+   * False if the file is gone, so a just-expired input is fetched again.
+   */
+  private static _reuseCached(path: string): boolean {
+    try {
+      const now = new Date();
+      utimesSync(path, now, now);
+      return true;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === "ENOENT") return false;
+      throw err;
+    }
+  }
+
   // --- Data URI ---
 
   private _decodeDataUri(uri: string): void {
@@ -293,11 +308,13 @@ export class File {
 
     // Check for existing cached file
     if (existsSync(cacheDir)) {
-      const files = readdirSync(cacheDir);
-      if (files.length > 0) {
-        this._path = join(cacheDir, files[0]);
-        this._populateMetadata();
-        return;
+      for (const name of readdirSync(cacheDir)) {
+        const cached = join(cacheDir, name);
+        if (File._reuseCached(cached)) {
+          this._path = cached;
+          this._populateMetadata();
+          return;
+        }
       }
     }
 
@@ -322,7 +339,7 @@ export class File {
   private async _downloadUrl(url: string): Promise<void> {
     const cachePath = this._getCachePath(url);
 
-    if (existsSync(cachePath)) {
+    if (File._reuseCached(cachePath)) {
       this._path = cachePath;
       this._populateMetadata();
       return;

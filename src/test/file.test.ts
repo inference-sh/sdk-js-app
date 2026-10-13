@@ -1,6 +1,8 @@
 import { describe, it, before, after, mock } from "node:test";
 import assert from "node:assert";
-import { writeFileSync, mkdirSync, rmSync } from "node:fs";
+import { writeFileSync, mkdirSync, rmSync, statSync, utimesSync, unlinkSync, readFileSync } from "node:fs";
+import { createServer, type Server } from "node:http";
+import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { File } from "../file.js";
@@ -187,5 +189,66 @@ describe("File lazy loading", () => {
     assert.ok(path);
     assert.ok(path.endsWith("hello.txt"));
     assert.strictEqual(file.isResolved, true);
+  });
+});
+
+// The engine expires cached inputs by mtime, so reuse refreshes it.
+describe("File cache last use", () => {
+  const CACHE_DIR = join(tmpdir(), `infsh-cache-test-${process.pid}`);
+  let server: Server;
+  let url: string;
+  let body = "fetched";
+  let fetches = 0;
+
+  before(async () => {
+    process.env.FILE_CACHE_DIR = CACHE_DIR;
+    server = createServer((_req, res) => {
+      fetches++;
+      res.end(body);
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    url = `http://127.0.0.1:${(server.address() as AddressInfo).port}/inputs/image.png`;
+  });
+
+  after(() => {
+    server.close();
+    delete process.env.FILE_CACHE_DIR;
+    rmSync(CACHE_DIR, { recursive: true, force: true });
+  });
+
+  const age = (path: string): number => {
+    const old = statSync(path).mtimeMs / 1000 - 48 * 3600;
+    utimesSync(path, old, old);
+    return old * 1000;
+  };
+
+  it("reuse refreshes the mtime", async () => {
+    const path = await (await File.from(url)).getPath();
+    const old = age(path);
+    const before = fetches;
+
+    assert.strictEqual(await (await File.from(url)).getPath(), path);
+    assert.strictEqual(fetches, before);
+    assert.ok(statSync(path).mtimeMs > old);
+  });
+
+  it("an expired input downloads again", async () => {
+    const path = await (await File.from(url)).getPath();
+    unlinkSync(path);
+    body = "again";
+    const before = fetches;
+
+    assert.strictEqual(await (await File.from(url)).getPath(), path);
+    assert.strictEqual(fetches, before + 1);
+    assert.strictEqual(readFileSync(path, "utf8"), "again");
+  });
+
+  it("data URI reuse refreshes the mtime", async () => {
+    const uri = "data:text/plain,hello";
+    const path = await (await File.from(uri)).getPath();
+    const old = age(path);
+
+    assert.strictEqual(await (await File.from(uri)).getPath(), path);
+    assert.ok(statSync(path).mtimeMs > old);
   });
 });
