@@ -225,10 +225,10 @@ describe("File cache last use", () => {
   it("reuse refreshes the mtime", async () => {
     const path = await (await File.from(url)).getPath();
     const old = age(path);
-    const before = fetches;
+    const fetchesBefore = fetches;
 
     assert.strictEqual(await (await File.from(url)).getPath(), path);
-    assert.strictEqual(fetches, before);
+    assert.strictEqual(fetches, fetchesBefore);
     assert.ok(statSync(path).mtimeMs > old);
   });
 
@@ -236,10 +236,10 @@ describe("File cache last use", () => {
     const path = await (await File.from(url)).getPath();
     unlinkSync(path);
     body = "again";
-    const before = fetches;
+    const fetchesBefore = fetches;
 
     assert.strictEqual(await (await File.from(url)).getPath(), path);
-    assert.strictEqual(fetches, before + 1);
+    assert.strictEqual(fetches, fetchesBefore + 1);
     assert.strictEqual(readFileSync(path, "utf8"), "again");
   });
 

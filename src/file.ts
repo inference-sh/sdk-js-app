@@ -307,15 +307,11 @@ export class File {
     const cacheDir = join(File.getCacheDir(), "data_uri", hash);
 
     // Check for existing cached file
-    if (existsSync(cacheDir)) {
-      for (const name of readdirSync(cacheDir)) {
-        const cached = join(cacheDir, name);
-        if (File._reuseCached(cached)) {
-          this._path = cached;
-          this._populateMetadata();
-          return;
-        }
-      }
+    const files = existsSync(cacheDir) ? readdirSync(cacheDir) : [];
+    if (files.length > 0 && File._reuseCached(join(cacheDir, files[0]))) {
+      this._path = join(cacheDir, files[0]);
+      this._populateMetadata();
+      return;
     }
 
     // Set content type from data URI
