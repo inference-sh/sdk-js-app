@@ -19,7 +19,7 @@
  * ```
  */
 
-import type { CredentialRequirement, ProviderSeed, ToolAnnotations } from "./types.js";
+import type { CredentialRequirement, CompanySeed, ToolAnnotations } from "./types.js";
 
 /**
  * One credential entry as an app may write it: the current keys, plus the
@@ -27,7 +27,7 @@ import type { CredentialRequirement, ProviderSeed, ToolAnnotations } from "./typ
  * and `website`) which are folded into the current ones.
  */
 export interface CredentialEntry extends Omit<CredentialRequirement, "provider"> {
-  provider?: string | ProviderSeed;
+  provider?: string | CompanySeed;
   /** Older: a capability such as `google.calendar.events`. */
   key?: string;
   /** Older: the provider's display name (now `provider.name`). */
@@ -90,7 +90,7 @@ function entryFromRef(ref: string): CredentialEntry {
   return ref.includes(".") ? { key: ref } : { slug: ref };
 }
 
-function checkProviderSeed(where: string, seed: unknown): ProviderSeed {
+function checkProviderSeed(where: string, seed: unknown): CompanySeed {
   if (!isObject(seed)) throw new TypeError(`${where}: expected an object, got ${typeName(seed)}`);
   const unknown = unknownKeys(seed, PROVIDER_SEED_KEYS);
   if (unknown.length > 0) {
@@ -103,7 +103,7 @@ function checkProviderSeed(where: string, seed: unknown): ProviderSeed {
     if (typeof v !== "string") throw new TypeError(`${where}.${k}: expected a string, got ${typeName(v)}`);
     if (v) out[k] = v;
   }
-  return out as ProviderSeed;
+  return out as CompanySeed;
 }
 
 /** One entry, in any accepted spelling, as the normalised requirement. */
@@ -169,7 +169,7 @@ function checkCredential(where: string, raw: unknown, slugFromKey = ""): Credent
       if (v.length > 0) out[k] = v;
     }
   }
-  if (Object.keys(seed).length > 0) out.provider = seed as ProviderSeed;
+  if (Object.keys(seed).length > 0) out.provider = seed as CompanySeed;
   if (auth) out.auth = { ...(auth as object) } as CredentialRequirement["auth"];
   return out;
 }
