@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { createWriteStream, existsSync, mkdirSync, readdirSync, statSync, renameSync, unlinkSync, copyFileSync, writeFileSync, utimesSync } from "node:fs";
+import { createWriteStream, existsSync, mkdirSync, readdirSync, statSync, renameSync, unlinkSync, writeFileSync, utimesSync } from "node:fs";
 import { basename, resolve, join } from "node:path";
 import { homedir } from "node:os";
 import { get as httpsGet } from "node:https";
@@ -454,11 +454,13 @@ function downloadToFile(url: string, destPath: string, maxRedirects = 10): Promi
     const request = getter(url, (response: IncomingMessage) => {
       // Follow redirects
       if (response.statusCode && response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+        response.resume(); // drain so the socket is released
         downloadToFile(response.headers.location, destPath, maxRedirects - 1).then(resolve, reject);
         return;
       }
 
       if (response.statusCode && response.statusCode >= 400) {
+        response.resume(); // drain so the socket is released
         reject(new Error(`HTTP ${response.statusCode}`));
         return;
       }
