@@ -118,12 +118,11 @@ export class File {
       this._populateMetadata();
     }
 
-    this._resolved = true;
-
     if (!this._path) {
       throw new Error("Failed to resolve file path");
     }
 
+    this._resolved = true;
     return this._path;
   }
 
