@@ -252,3 +252,56 @@ describe("File cache last use", () => {
     assert.ok(statSync(path).mtimeMs > old);
   });
 });
+
+// downloadToFile must consume redirect and error bodies, or the socket stays
+// held: the server can never finish writing a body larger than the socket
+// buffers.
+describe("File download drains unused responses", () => {
+  const CACHE_DIR = join(tmpdir(), `infsh-drain-test-${process.pid}`);
+  const BIG = Buffer.alloc(8 * 1024 * 1024, 120);
+  let server: Server;
+  let base: string;
+  const finished = new Map<string, Promise<void>>();
+
+  before(async () => {
+    process.env.FILE_CACHE_DIR = CACHE_DIR;
+    server = createServer((req, res) => {
+      finished.set(req.url ?? "", new Promise<void>((resolve) => res.on("finish", resolve)));
+      if (req.url?.startsWith("/redirect")) {
+        res.writeHead(302, { Location: `${base}/ok.txt` });
+        res.end(BIG);
+      } else if (req.url?.startsWith("/missing")) {
+        res.writeHead(404);
+        res.end(BIG);
+      } else {
+        res.end("ok");
+      }
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    base = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  after(() => {
+    server.closeAllConnections();
+    server.close();
+    delete process.env.FILE_CACHE_DIR;
+    rmSync(CACHE_DIR, { recursive: true, force: true });
+  });
+
+  const drainedWithin = (path: string, ms: number): Promise<boolean> =>
+    Promise.race([
+      finished.get(path)!.then(() => true),
+      new Promise<boolean>((resolve) => setTimeout(() => resolve(false), ms).unref()),
+    ]);
+
+  it("drains the body of a redirect", async () => {
+    const path = await (await File.from(`${base}/redirect/a.txt`)).getPath();
+    assert.strictEqual(readFileSync(path, "utf8"), "ok");
+    assert.strictEqual(await drainedWithin("/redirect/a.txt", 2000), true);
+  });
+
+  it("drains the body of an HTTP error", async () => {
+    await assert.rejects(File.from(`${base}/missing/b.txt`), /HTTP 404/);
+    assert.strictEqual(await drainedWithin("/missing/b.txt", 2000), true);
+  });
+});
