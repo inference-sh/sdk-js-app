@@ -299,19 +299,19 @@ export class File {
   // --- Data URI ---
 
   private _decodeDataUri(uri: string): void {
-    const parsed = parseDataUri(uri);
-
     // Create cache path based on hash
     const hash = createHash("sha256").update(uri).digest("hex").slice(0, 16);
     const cacheDir = join(File.getCacheDir(), "data_uri", hash);
 
-    // Check for existing cached file
+    // Check for existing cached file before parsing (parsing can be expensive for large data URIs)
     const files = existsSync(cacheDir) ? readdirSync(cacheDir) : [];
     if (files.length > 0 && File._reuseCached(join(cacheDir, files[0]))) {
       this._path = join(cacheDir, files[0]);
       this._populateMetadata();
       return;
     }
+
+    const parsed = parseDataUri(uri);
 
     // Set content type from data URI
     if (!this.contentType) {
