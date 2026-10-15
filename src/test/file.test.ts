@@ -108,6 +108,16 @@ describe("File lazy loading", () => {
     assert.strictEqual(file.path, undefined);
   });
 
+  it("a failed resolve leaves the file unresolved", async () => {
+    // Neither uri nor path: the public factories refuse this, so reach the
+    // private constructor to exercise the guard in _resolve().
+    const Ctor = File as unknown as new (options: object) => File;
+    const file = new Ctor({});
+
+    await assert.rejects(file.getPath(), /Failed to resolve file path/);
+    assert.strictEqual(file.isResolved, false);
+  });
+
   it("File.lazy() resolves local paths immediately", () => {
     const file = File.lazy(testFile);
 
