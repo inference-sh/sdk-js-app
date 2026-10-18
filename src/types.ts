@@ -53,6 +53,34 @@ export interface CredentialRequirement {
    * Auth is the credential's auth provider, for a slug no row defines yet.
    */
   auth?: AuthMethod;
+  /**
+   * The rest describe the platform api_key scheme a platform app's deploy
+   * catalogues for the slug: set on the scheme it creates, and filled into
+   * an existing one only where that is still empty (an admin's edit
+   * stands). Any other deploy ignores them.
+   * DisplayName is the scheme's name ("Claude Code"); at most
+   * MaxCredentialDisplayName characters.
+   */
+  display_name?: string;
+  /**
+   * ConnectionScope is who a connection belongs to: team (empty) or user.
+   */
+  connection_scope?: CredentialScope;
+  /**
+   * Instructions tell a person how to get the key (markdown, at most
+   * MaxAuthProviderInstructions characters).
+   */
+  instructions?: string;
+  /**
+   * DocsURL is the scheme's documentation link.
+   */
+  docs_url?: string;
+  /**
+   * ExpiresAfterDays is how long a saved key lasts: it counts as expired
+   * this many days after it is saved. 0 is never; at most
+   * MaxExpiresAfterDays.
+   */
+  expires_after_days?: number /* int */;
 }
 /**
  * CompanySeed is a provider (the company behind a credential) as an app
@@ -88,6 +116,11 @@ export interface CredentialRequirementWire {
   key: string;
   name: string;
   website: string;
+  display_name: string;
+  connection_scope: CredentialScope;
+  instructions: string;
+  docs_url: string;
+  expires_after_days: number /* int */;
 }
 /**
  * CredentialRequirements is the credentials: list of a manifest. It reads
@@ -207,6 +240,12 @@ export interface SecretField {
   placeholder?: string;
   sensitive?: boolean;
   optional?: boolean;
+  /**
+   * Pattern, when set, is a regular expression (RE2) a saved value must
+   * match, so a pasted login link or the wrong key is refused on save
+   * instead of failing the first run ("^sk-ant-oat01-").
+   */
+  pattern?: string;
 }
 /**
  * AuthMethodClientAuth is how client_id/client_secret reach the token
@@ -558,3 +597,23 @@ export const VideoRes720P: VideoResolution = "720p";
 export const VideoRes1080P: VideoResolution = "1080p";
 export const VideoRes1440P: VideoResolution = "1440p";
 export const VideoRes4K: VideoResolution = "4k";
+/**
+ * CredentialScope controls resolution priority and ownership.
+ */
+export type CredentialScope =
+  | "platform"
+  | "org"
+  | "team"
+  | "user"
+  | "agent";
+export const CredentialScopePlatform: CredentialScope = "platform";
+/**
+ * CredentialScopeOrg: shared across all teams of an org. In the enum for
+ * end-to-end typing (connect-level pickers); connects with it are refused
+ * until the org domain lands (INF-795 Phase 2). Resolution order once
+ * live: agent > user > team > org > platform.
+ */
+export const CredentialScopeOrg: CredentialScope = "org";
+export const CredentialScopeTeam: CredentialScope = "team";
+export const CredentialScopeUser: CredentialScope = "user";
+export const CredentialScopeAgent: CredentialScope = "agent";
