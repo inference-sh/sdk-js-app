@@ -53,6 +53,34 @@ export interface CredentialRequirement {
    * Auth is the credential's auth provider, for a slug no row defines yet.
    */
   auth?: AuthMethod;
+  /**
+   * The rest describe the platform api_key scheme a platform app's deploy
+   * catalogues for the slug: set on the scheme it creates, and filled into
+   * an existing one only where that is still empty (an admin's edit
+   * stands). Any other deploy ignores them.
+   * DisplayName is the scheme's name ("Claude Code"); at most
+   * MaxCredentialDisplayName characters.
+   */
+  display_name?: string;
+  /**
+   * ConnectionScope is who a connection belongs to: team (empty) or user.
+   */
+  connection_scope?: CredentialScope;
+  /**
+   * Instructions tell a person how to get the key (markdown, at most
+   * MaxAuthProviderInstructions characters).
+   */
+  instructions?: string;
+  /**
+   * DocsURL is the scheme's documentation link.
+   */
+  docs_url?: string;
+  /**
+   * ExpiresAfterDays is how long a saved key lasts: it counts as expired
+   * this many days after it is saved. 0 is never; at most
+   * MaxExpiresAfterDays.
+   */
+  expires_after_days?: number /* int */;
 }
 /**
  * CompanySeed is a provider (the company behind a credential) as an app
@@ -88,6 +116,11 @@ export interface CredentialRequirementWire {
   key: string;
   name: string;
   website: string;
+  display_name: string;
+  connection_scope: CredentialScope;
+  instructions: string;
+  docs_url: string;
+  expires_after_days: number /* int */;
 }
 /**
  * CredentialRequirements is the credentials: list of a manifest. It reads
@@ -207,6 +240,12 @@ export interface SecretField {
   placeholder?: string;
   sensitive?: boolean;
   optional?: boolean;
+  /**
+   * Pattern, when set, is a regular expression (RE2) a saved value must
+   * match, so a pasted login link or the wrong key is refused on save
+   * instead of failing the first run ("^sk-ant-oat01-").
+   */
+  pattern?: string;
 }
 /**
  * AuthMethodClientAuth is how client_id/client_secret reach the token
@@ -316,8 +355,8 @@ export interface AuthMethodLookup {
 }
 /**
  * AuthMethodCapability is something an app can ask for from this provider,
- * satisfied by a connection holding its scopes. Scopes are in the scheme's
- * own (friendly) names, the ones a credential stores.
+ * satisfied by a connection holding its scopes. Scopes are the provider's
+ * own names (Wire form), the ones a credential stores.
  */
 export interface AuthMethodCapability {
   key: string; // "google.gmail.send"
@@ -374,10 +413,11 @@ export interface AuthMethod {
   authorization_endpoint?: string;
   scopes?: string[]; // requested by default; a connect request may override (RequiredScopes stay)
   /**
-   * ScopeAliases map the scheme's own scope names to what the provider
-   * wants on the wire ("gmail.send" → "https://www.googleapis.com/auth/
-   * gmail.send"). Credentials store the alias; the wire form is used only
-   * in requests. A scope with no alias is sent as is.
+   * ScopeAliases are shorthand a caller may write for a provider scope
+   * ("gmail.send" → "https://www.googleapis.com/auth/gmail.send"). They
+   * are accepted on input only: credentials, capabilities and allowed
+   * lists hold the provider's own name (Wire), and every comparison is
+   * in that form. A scope with no alias is the provider's name as is.
    */
   scope_aliases?: { [key: string]: string};
   scope_param?: string; // default "scope" (Slack: "user_scope")
@@ -417,7 +457,7 @@ export interface AuthMethod {
    * re-authorizing for more scopes, whatever the caller asked for: the
    * scopes the identity lookup and token refresh need (Google's openid,
    * email and profile; X's users.read and offline.access). In the
-   * scheme's own names, like Scopes. Empty = only what was asked for.
+   * provider's own names, like Scopes. Empty = only what was asked for.
    */
   required_scopes?: string[];
   /**
@@ -558,3 +598,23 @@ export const VideoRes720P: VideoResolution = "720p";
 export const VideoRes1080P: VideoResolution = "1080p";
 export const VideoRes1440P: VideoResolution = "1440p";
 export const VideoRes4K: VideoResolution = "4k";
+/**
+ * CredentialScope controls resolution priority and ownership.
+ */
+export type CredentialScope =
+  | "platform"
+  | "org"
+  | "team"
+  | "user"
+  | "agent";
+export const CredentialScopePlatform: CredentialScope = "platform";
+/**
+ * CredentialScopeOrg: shared across all teams of an org. In the enum for
+ * end-to-end typing (connect-level pickers); connects with it are refused
+ * until the org domain lands (INF-795 Phase 2). Resolution order once
+ * live: agent > user > team > org > platform.
+ */
+export const CredentialScopeOrg: CredentialScope = "org";
+export const CredentialScopeTeam: CredentialScope = "team";
+export const CredentialScopeUser: CredentialScope = "user";
+export const CredentialScopeAgent: CredentialScope = "agent";
