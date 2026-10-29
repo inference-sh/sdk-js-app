@@ -601,20 +601,15 @@ export const VideoRes4K: VideoResolution = "4k";
 /**
  * CredentialScope controls resolution priority and ownership.
  */
-export type CredentialScope =
-  | "platform"
-  | "org"
-  | "team"
-  | "user"
-  | "agent";
+export type CredentialScope = "platform" | "org" | "team" | "user";
 export const CredentialScopePlatform: CredentialScope = "platform";
 /**
  * CredentialScopeOrg: shared across all teams of an org. In the enum for
  * end-to-end typing (connect-level pickers); connects with it are refused
  * until the org domain lands (INF-795 Phase 2). Resolution order once
- * live: agent > user > team > org > platform.
+ * live: user > team > org > platform. Credentials an agent uses are
+ * composed by vaults (INF-737), not by a scope.
  */
 export const CredentialScopeOrg: CredentialScope = "org";
 export const CredentialScopeTeam: CredentialScope = "team";
 export const CredentialScopeUser: CredentialScope = "user";
-export const CredentialScopeAgent: CredentialScope = "agent";
