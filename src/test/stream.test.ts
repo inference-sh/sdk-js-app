@@ -17,10 +17,9 @@ import {
   BINARY_SCHEMA_MARKER,
 } from "../stream.js";
 
-// The app's zod: v4 (devDependency "zod") and v3 (devDependency alias "zod3").
+// The app's zod: v4 ("zod") and v3 ("zod/v3", the zod 3 API zod 4 ships).
 import { z as z4 } from "zod";
-// @ts-ignore - alias package, typed loosely on purpose
-import { z as z3 } from "zod3";
+import { z as z3 } from "zod/v3";
 
 class FakeSocket implements Socket {
   readonly id = "fake";

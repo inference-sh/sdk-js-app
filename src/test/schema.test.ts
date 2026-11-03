@@ -9,7 +9,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { File } from "../file.js";
 import { createFileSchema, isFileSchema, FILE_SCHEMA_MARKER } from "../schema.js";
-import { z as z3 } from "zod3";
+import { z as z3 } from "zod/v3";
 
 // Import zod (devDependency)
 import { z } from "zod";
