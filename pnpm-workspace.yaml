@@ -1,0 +1,4 @@
+# Security override for a dev-only transitive dependency (Dependabot #15).
+# rimraf's glob uses minimatch's named export, which 11 keeps.
+overrides:
+  'minimatch@<11.0.1': ^11.0.3
