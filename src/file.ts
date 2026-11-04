@@ -467,6 +467,10 @@ function downloadToFile(url: string, destPath: string, maxRedirects = 10): Promi
       mkdirSync(dir, { recursive: true });
 
       const stream = createWriteStream(destPath);
+      response.on("error", (err) => {
+        stream.destroy(err);
+        reject(err);
+      });
       response.pipe(stream);
       stream.on("finish", () => {
         stream.close();
