@@ -1,4 +1,6 @@
-# Security override for a dev-only transitive dependency (Dependabot #15).
-# rimraf's glob uses minimatch's named export, which 11 keeps.
+# Security overrides for dev-only transitive dependencies (Dependabot #15).
+# glob 9-14.0.1 and minimatch <11.0.1 have no backports; rimraf only uses the
+# named glob()/minimatch() exports, which the new majors keep.
 overrides:
+  'glob@>=9.0.0 <14.0.2': ^14.0.2
   'minimatch@<11.0.1': ^11.0.3
