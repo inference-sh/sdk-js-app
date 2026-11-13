@@ -30,7 +30,7 @@ steps:
       git diff "${BEFORE_SHA}..${AFTER_SHA}" > /tmp/gh-aw/commit-diff.txt 2>&1 || true
   - name: Install and build
     run: |
-      npm ci 2>&1 || npm install 2>&1 || true
+      corepack enable 2>&1 && pnpm install --frozen-lockfile --ignore-scripts 2>&1 || true
       npm run build 2>&1 || true
     continue-on-error: true
   - name: Run tests
