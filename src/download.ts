@@ -1,7 +1,6 @@
 import { existsSync, mkdirSync, copyFileSync } from "node:fs";
 import { join, basename } from "node:path";
-import { createHash } from "node:crypto";
-import { File } from "./file.js";
+import { File, urlCacheKey } from "./file.js";
 import { StorageDir, type StorageDirValue } from "./storage.js";
 
 /**
@@ -26,9 +25,7 @@ export async function download(
 
   // Build output path with hash subdirectory (matches Python SDK)
   const parsed = new URL(url);
-  let components = parsed.host + parsed.pathname;
-  if (parsed.search) components += parsed.search;
-  const hash = createHash("sha256").update(components).digest("hex").slice(0, 12);
+  const hash = urlCacheKey(url);
   const filename = basename(parsed.pathname) || "download";
 
   const hashDir = join(dirPath, hash);

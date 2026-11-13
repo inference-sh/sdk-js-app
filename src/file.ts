@@ -270,10 +270,7 @@ export class File {
 
   private _getCachePath(url: string): string {
     const parsed = new URL(url);
-    let components = parsed.host + parsed.pathname;
-    if (parsed.search) components += parsed.search;
-
-    const hash = createHash("sha256").update(components).digest("hex").slice(0, 12);
+    const hash = urlCacheKey(url);
     const fname = basename(parsed.pathname) || "download";
 
     const hashDir = join(File.getCacheDir(), hash);
@@ -373,6 +370,22 @@ export class File {
 }
 
 // --- Helpers ---
+
+/**
+ * The directory name a URL's download is kept under: a hash of its host, path
+ * and query, and of its credentials when it has any, so what a
+ * `user:password@` URL fetched is never served for the same URL without them,
+ * or with others. A URL without credentials hashes as it always did.
+ */
+export function urlCacheKey(url: string): string {
+  const parsed = new URL(url);
+  let components = parsed.host + parsed.pathname;
+  if (parsed.search) components += parsed.search;
+  if (parsed.username || parsed.password) {
+    components = `${parsed.username}:${parsed.password}@${components}`;
+  }
+  return createHash("sha256").update(components).digest("hex").slice(0, 12);
+}
 
 function isUrl(s: string): boolean {
   return s.startsWith("http://") || s.startsWith("https://");

@@ -6,6 +6,7 @@ import type { AddressInfo } from "node:net";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { File } from "../file.js";
+import { download } from "../download.js";
 
 const TEST_DIR = join(tmpdir(), "inferencesh-app-test-" + Date.now());
 let testFile: string;
@@ -313,5 +314,53 @@ describe("File download drains unused responses", () => {
   it("drains the body of an HTTP error", async () => {
     await assert.rejects(File.from(`${base}/missing/b.txt`), /HTTP 404/);
     assert.strictEqual(await drainedWithin("/missing/b.txt", 2000), true);
+  });
+});
+
+// A download made with the URL's own credentials is that caller's: the same
+// URL without them, or with others, is another cache entry.
+describe("File cache keeps credentialed URLs apart", () => {
+  const CACHE_DIR = join(tmpdir(), `infsh-cred-test-${process.pid}`);
+  const OUT_DIR = join(tmpdir(), `infsh-cred-out-${process.pid}`);
+  const allowed = "Basic " + Buffer.from("alice:s3cret").toString("base64");
+  let server: Server;
+  let host: string;
+
+  before(async () => {
+    process.env.FILE_CACHE_DIR = CACHE_DIR;
+    server = createServer((req, res) => {
+      if (req.headers.authorization !== allowed) {
+        res.writeHead(401);
+        res.end("denied");
+        return;
+      }
+      res.end("private");
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    host = `127.0.0.1:${(server.address() as AddressInfo).port}`;
+  });
+
+  after(() => {
+    server.close();
+    delete process.env.FILE_CACHE_DIR;
+    rmSync(CACHE_DIR, { recursive: true, force: true });
+    rmSync(OUT_DIR, { recursive: true, force: true });
+  });
+
+  it("File.from does not serve it to a URL without the credentials", async () => {
+    const path = await (await File.from(`http://alice:s3cret@${host}/private/report.txt`)).getPath();
+    assert.strictEqual(readFileSync(path, "utf8"), "private");
+
+    await assert.rejects(async () => (await File.from(`http://${host}/private/report.txt`)).getPath(), /HTTP 401/);
+    await assert.rejects(async () => (await File.from(`http://mallory:guess@${host}/private/report.txt`)).getPath(), /HTTP 401/);
+    // The same credentials reuse the entry.
+    assert.strictEqual(await (await File.from(`http://alice:s3cret@${host}/private/report.txt`)).getPath(), path);
+  });
+
+  it("download does not serve it to a URL without the credentials", async () => {
+    const path = await download(`http://alice:s3cret@${host}/private/data.txt`, OUT_DIR);
+    assert.strictEqual(readFileSync(path, "utf8"), "private");
+
+    await assert.rejects(download(`http://${host}/private/data.txt`, OUT_DIR), /HTTP 401/);
   });
 });
