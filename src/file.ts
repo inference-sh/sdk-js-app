@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, scryptSync } from "node:crypto";
 import { createWriteStream, existsSync, mkdirSync, readdirSync, statSync, renameSync, unlinkSync, writeFileSync, utimesSync } from "node:fs";
 import { basename, resolve, join } from "node:path";
 import { homedir } from "node:os";
@@ -371,6 +371,8 @@ export class File {
 
 // --- Helpers ---
 
+const CREDENTIAL_TAG_SALT = "inferencesh/file-cache/url-credentials";
+
 /**
  * The directory name a URL's download is kept under: a hash of its host, path
  * and query, and of its credentials when it has any, so what a
@@ -382,7 +384,11 @@ export function urlCacheKey(url: string): string {
   let components = parsed.host + parsed.pathname;
   if (parsed.search) components += parsed.search;
   if (parsed.username || parsed.password) {
-    components = `${parsed.username}:${parsed.password}@${components}`;
+    // The credentials reach the key through a password hash, never a bare
+    // digest: the key is a directory name on disk, and a fast hash of a
+    // password can be reversed by guessing.
+    const tag = scryptSync(`${parsed.username}:${parsed.password}`, CREDENTIAL_TAG_SALT, 16).toString("hex");
+    components = `${tag}@${components}`;
   }
   return createHash("sha256").update(components).digest("hex").slice(0, 12);
 }
