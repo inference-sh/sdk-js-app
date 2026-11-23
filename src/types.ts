@@ -54,6 +54,14 @@ export interface CredentialRequirement {
    */
   auth?: AuthMethod;
   /**
+   * Mode is when a box gets the login: auto (empty) when the sandbox is
+   * made, ask on first use once a person approves it. It means something
+   * only where a box is given the login (a sandbox's credentials, an
+   * agent's credentials, which its sandboxes get); an app's or an MCP
+   * server's entry with a mode is refused (ValidateNoMode).
+   */
+  mode?: SandboxCredentialMode;
+  /**
    * The rest describe the platform api_key scheme a platform app's deploy
    * catalogues for the slug: set on the scheme it creates, and filled into
    * an existing one only where that is still empty (an admin's edit
@@ -116,6 +124,7 @@ export interface CredentialRequirementWire {
   key: string;
   name: string;
   website: string;
+  mode: SandboxCredentialMode;
   display_name: string;
   connection_scope: CredentialScope;
   instructions: string;
@@ -143,6 +152,22 @@ export interface ToolAnnotations {
   idempotentHint?: boolean;
   openWorldHint?: boolean;
 }
+/**
+ * SandboxCredentialMode is when a sandbox's login is given to its box.
+ */
+export type SandboxCredentialMode = "auto" | "ask";
+/**
+ * SandboxCredentialAuto (the default): the login is chosen when the
+ * sandbox is made and given without asking.
+ */
+export const SandboxCredentialAuto: SandboxCredentialMode = "auto";
+/**
+ * SandboxCredentialAsk: the box gets the login on first use, once a
+ * person approves it on the tool call running there; a run nobody
+ * watches (a trigger, a schedule) never gets it (INF-1173). Needs an
+ * engine with EngineCapabilityEgressPending.
+ */
+export const SandboxCredentialAsk: SandboxCredentialMode = "ask";
 export interface AppSDKTypes {
 }
 /**
@@ -224,6 +249,16 @@ export type AuthMethodAPIKeyIn = "header" | "query";
 export const AuthMethodAPIKeyInHeader: AuthMethodAPIKeyIn = "header";
 export const AuthMethodAPIKeyInQuery: AuthMethodAPIKeyIn = "query";
 /**
+ * AuthMethodTransport is the protocol a provider's API is spoken in, when
+ * it matters to where a run may go (AuthMethod.Transport).
+ */
+export type AuthMethodTransport = "h2";
+/**
+ * AuthMethodTransportH2 is HTTP/2: gRPC, or an API that takes nothing
+ * else.
+ */
+export const AuthMethodTransportH2: AuthMethodTransport = "h2";
+/**
  * AuthMethodHTTPScheme is the Authorization scheme of an http scheme.
  */
 export type AuthMethodHTTPScheme = "bearer" | "basic";
@@ -246,6 +281,99 @@ export interface SecretField {
    * instead of failing the first run ("^sk-ant-oat01-").
    */
   pattern?: string;
+}
+/**
+ * AuthMethodSign is one key pair a scheme signs requests with
+ * (AuthMethod.Sign), and how: which of the scheme's fields is the access
+ * key id (sent in the clear, in the request's Authorization) and which
+ * the secret key, the hosts the pair signs toward, and the signature
+ * itself as data. Preset names a vendor's parameter set (SignPresets); a
+ * parameter written out overrides the preset's, and with no preset the
+ * recipe writes them all. The engines' egress gateway implements the
+ * algorithm; the vendor is these parameters.
+ */
+export interface AuthMethodSign {
+  /**
+   * Preset is a built-in parameter set: "volc-v4" (Volcengine, BytePlus)
+   * or "tc3" (Tencent Cloud). Empty: the parameters below say it all.
+   */
+  preset?: string;
+  /**
+   * KeyID and Secret are the keys of the two fields: the access key id
+   * and the secret key.
+   */
+  key_id: string;
+  secret: string;
+  /**
+   * Region and Service fill the scope's {region} and {service} terms, as
+   * the vendor names them for Hosts ("ap-southeast-1", "ark"). Each is
+   * required when the scope has its term and refused when it does not.
+   */
+  region?: string;
+  service?: string;
+  /**
+   * Hosts are the hosts this pair signs toward, each exact; empty is
+   * the scheme's Hosts. One of the two is required.
+   */
+  hosts?: string[];
+  /**
+   * The parameters (SignParams says what each does). The four that may
+   * be empty on purpose are pointers: "" overrides a preset's value,
+   * absent keeps it.
+   */
+  algorithm?: string;
+  label?: string;
+  key_prefix?: string;
+  scope?: string[];
+  date_format?: string;
+  time_header?: string;
+  time_format?: string;
+  hash_header?: string;
+  unsigned_header?: string;
+  signed_headers?: string[];
+  header_values?: string;
+  uri?: string;
+  host?: string;
+  token_header?: string;
+}
+/**
+ * AuthMethodJWTAlg is a token's signature (AuthMethodJWT.Alg).
+ */
+export type AuthMethodJWTAlg = "HS256";
+/**
+ * AuthMethodJWTHS256 is HMAC-SHA256 keyed by the signing field's value.
+ */
+export const AuthMethodJWTHS256: AuthMethodJWTAlg = "HS256";
+/**
+ * AuthMethodJWT is the token a scheme's key is made as (AuthMethod.JWT): a
+ * JWT with the header {"alg": Alg, "typ": "JWT"} and the claims iss
+ * (Issuer's value, when named), exp (now + TTL), nbf (now - NotBefore,
+ * when set) and Claims, signed with Secret's value.
+ */
+export interface AuthMethodJWT {
+  /**
+   * Key is the name a run presents as its bearer: the one placeholder it
+   * holds. A login holding a value under Key itself sends that value
+   * instead (a static API key); it need not be one of Fields.
+   */
+  key: string;
+  alg: AuthMethodJWTAlg;
+  /**
+   * Secret is the field whose value signs; Issuer the field whose value
+   * is the iss claim, "" for none. Neither is ever given to a run.
+   */
+  secret: string;
+  issuer?: string;
+  /**
+   * TTL is the token's lifetime in seconds, at most a day; NotBefore is
+   * how many seconds before now nbf is set, 0 for no nbf.
+   */
+  ttl: number /* int */;
+  nbf?: number /* int */;
+  /**
+   * Claims are claims added as they are; iss, exp and nbf win.
+   */
+  claims?: { [key: string]: string};
 }
 /**
  * AuthMethodClientAuth is how client_id/client_secret reach the token
@@ -333,6 +461,13 @@ export interface AuthMethodAppKey {
    * Optional is implied for every name but client_id and client_secret.
    */
   optional?: boolean;
+  /**
+   * Token marks a key that is a token of its own, sent as
+   * Authorization: Bearer to the method's hosts (Slack's bot token): a
+   * run given it holds a placeholder, bound to Hosts like the login's
+   * access token. A key that never travels (a signing secret) is not one.
+   */
+  token?: boolean;
 }
 /**
  * AuthMethodLookup is a call made after the token exchange, with the new
@@ -352,6 +487,47 @@ export interface AuthMethodLookup {
   body?: string;
   content_type?: string;
   headers?: { [key: string]: string};
+}
+/**
+ * AuthMethodBot is the provider's bot user, installed by the sign-in into
+ * the workspace the person signs in to (Slack's bot scopes on the same
+ * authorize as the user's). The token it yields is that workspace's bot,
+ * the login's own: stored with the login (its bot_token secret), never the
+ * OAuth app's, and read in env as {{bot_token}}.
+ */
+export interface AuthMethodBot {
+  /**
+   * ScopeParam is the authorize param the bot's scopes travel in, apart
+   * from the login's (Slack: "scope", next to user_scope). Bot scopes are
+   * named with BotScopePrefix wherever scopes are (Scopes, a capability,
+   * a request) and sent here without it.
+   */
+  scope_param: string;
+  /**
+   * Scopes are the bot's scopes, each named with BotScopePrefix: what
+   * installing the bot asks for (a capability names them; a login made
+   * without them is asked for them when a run needs its bot). Not asked
+   * for by default: a first connect stays read-only.
+   */
+  scopes?: string[];
+  /**
+   * Token is the bot's token in the token exchange's document
+   * ({{token.bot.access_token}}); blank when the exchange installed no
+   * bot.
+   */
+  token: string;
+  /**
+   * GrantedScopes is the bot scopes the exchange granted, in the same
+   * document, comma or space separated; the login holds each with
+   * BotScopePrefix. Empty: the bot scopes asked for, once a token came.
+   */
+  granted_scopes?: string;
+  /**
+   * Hosts are the exact hosts the bot token is sent to: every env key
+   * reading {{bot_token}} is bound to them (authmethod.HostBinder), so a
+   * run behind the egress gateway holds a placeholder. Empty: env as is.
+   */
+  hosts?: string[];
 }
 /**
  * AuthMethodCapability is something an app can ask for from this provider,
@@ -383,6 +559,7 @@ export interface AuthMethodCapability {
  * 	                           is the userinfo lookup
  * 	expires_at, metadata.*, app.*   env only: the token's expiry (RFC 3339),
  * 	                           the stored metadata, the app's extra keys
+ * 	bot_token                  env only: the bot the login installed (Bot)
  * Array elements are indexed: {{resources.0.id}}. {{a|b}} takes the first
  * path present. A template none of whose placeholders resolve renders "":
  * omitted from env and metadata, blank as identifier or name.
@@ -406,13 +583,26 @@ export interface AuthMethod {
   param_name?: string;
   value_prefix?: string;
   /**
+   * InBody says an api_key key also travels in the body of a request to
+   * Hosts (a field of a JSON or form body): the egress gateway replaces
+   * the key's placeholder there too, toward Hosts only. With no In, the
+   * key goes in the body alone. It needs Hosts, the row's or the
+   * catalog's; without them the key is an environment variable as before.
+   */
+  in_body?: boolean;
+  /**
    * Scheme and BearerFormat describe an http kind's Authorization header.
    */
   scheme?: AuthMethodHTTPScheme;
   bearer_format?: string;
   /**
    * Hosts are the hosts the credential's value is sent to, each exact
-   * ("api.anthropic.com", "db.example.com:5432"): the key a person
+   * ("api.anthropic.com", "db.example.com:5432"), or, beginning with a
+   * dot, every host under a domain (".example.com": api.example.com and
+   * api.eu1.example.com, never example.com itself; the domain is never
+   * a top-level domain or a registry's suffix such as ".co.uk", and may
+   * be a company's shared domain such as ".googleapis.com", a broad
+   * destination; models.ValidHostSuffix): the key a person
    * pastes, or an oauth2 scheme's access token. A scheme with hosts
    * binds its secrets: a run behind the egress gateway holds a
    * placeholder for each, and the gateway puts the value in only on the
@@ -421,6 +611,34 @@ export interface AuthMethod {
    * come from the catalog when the row names none.
    */
   hosts?: string[];
+  /**
+   * Sign says the provider takes no key: each request is signed with a
+   * key pair of Fields (Volcengine and BytePlus, Tencent Cloud). Each
+   * entry binds one pair for signing and says how the signature is made
+   * (a preset, or its parameters): a run behind the egress gateway holds
+   * a placeholder for both halves, its client signs with them, and the
+   * gateway signs the request again with the real pair toward the
+   * entry's hosts only. The secret key is never an environment variable.
+   * api_key kind. A catalogued provider's come from the catalog when the
+   * row has none.
+   */
+  sign?: AuthMethodSign[];
+  /**
+   * JWT says the provider takes a short-lived token the client signs
+   * with a key of Fields (Kling): the egress gateway signs it, and a run
+   * holds one placeholder, JWT.Key's, which leaves as the token toward
+   * Hosts. The signing fields are never given to a run. api_key kind. A
+   * catalogued provider's comes from the catalog when the row has none.
+   */
+  jwt?: AuthMethodJWT;
+  /**
+   * Transport says the provider's API is spoken over HTTP/2
+   * (AuthMethodTransportH2: gRPC), so a run given one of the scheme's
+   * bound secrets goes only to an engine whose egress gateway speaks it
+   * (egress_h2). Empty: HTTP/1.1 serves, and any gateway does. It needs
+   * Hosts, as InBody does.
+   */
+  transport?: AuthMethodTransport;
   authorization_endpoint?: string;
   scopes?: string[]; // requested by default; a connect request may override (RequiredScopes stay)
   /**
@@ -471,6 +689,17 @@ export interface AuthMethod {
    * provider's own names, like Scopes. Empty = only what was asked for.
    */
   required_scopes?: string[];
+  /**
+   * ScopeParams are authorize params sent when a scope is asked for, by
+   * that scope (Discord's bot: the permissions the bot gets in the server
+   * it is added to). They override ExtraAuthorizeParams.
+   */
+  scope_params?: { [key: string]: { [key: string]: string}};
+  /**
+   * Bot is the provider's bot user, installed into the signed-in
+   * workspace by the same authorize (Slack). Nil: none.
+   */
+  bot?: AuthMethodBot;
   /**
    * IncrementalAddScopes: re-authorizing for more scopes asks only for
    * the new ones (plus RequiredScopes), and the provider returns a token
